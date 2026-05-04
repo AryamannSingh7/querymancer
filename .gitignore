@@ -1,7 +1,6 @@
 # Claude Code — local-only artifacts
 CLAUDE.md
-.claude/settings.local.json
-.claude/settings.cache.json
+.claude/
 
 # Python
 __pycache__/

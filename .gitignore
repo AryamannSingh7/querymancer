@@ -1,0 +1,58 @@
+# Claude Code — local-only artifacts
+CLAUDE.md
+.claude/settings.local.json
+.claude/settings.cache.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.turbo/
+.pnpm-store/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+.pnpm-debug.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# Logs
+*.log
+logs/
+
+# Eval reports kept in repo are committed deliberately;
+# raw run artifacts under eval/_runs/ are not
+eval/_runs/
+
+# Local SQLite WAL files (the .db files themselves ARE committed)
+*.db-journal
+*.db-wal
+*.db-shm

@@ -98,19 +98,36 @@ A: {
 }"""
 
 
-def build_prompt(question: str, database_id: str) -> tuple[str, str]:
+def build_prompt(
+    question: str,
+    database_id: str,
+    errors: list[str] | None = None,
+) -> tuple[str, str]:
     """Return (system_instruction, user_prompt) for the given question.
 
     Phase 1 only supports database_id == "northwind".
+
+    On retries, pass `errors` — the verbatim DB / safety errors from prior
+    attempts. They are inlined into the prompt so the model can see what
+    went wrong and avoid repeating itself.
     """
     if database_id != "northwind":
         raise ValueError(
             f"Phase 1 only supports database_id='northwind', got '{database_id}'"
         )
 
+    error_block = ""
+    if errors:
+        formatted = "\n".join(f"  attempt {i + 1}: {e}" for i, e in enumerate(errors))
+        error_block = (
+            "PRIOR ATTEMPTS FAILED. Read the errors and fix the SQL accordingly:\n"
+            f"{formatted}\n\n"
+        )
+
     user_prompt = (
         f"{SCHEMA_TEXT}\n\n"
         f"{FEW_SHOTS}\n\n"
+        f"{error_block}"
         f"Q: {question.strip()}\n"
         f"A:"
     )

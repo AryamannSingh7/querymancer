@@ -1,8 +1,15 @@
-"""Hardcoded Northwind prompt builder (Phase 1).
+"""Prompt builder.
 
-Phase 3 will replace this with RAG-retrieved schema chunks. Phase 1 keeps it
-simple: paste the full schema, three few-shots, and one system instruction.
+Phase 3 swaps the hard-coded SCHEMA_TEXT for retrieval-augmented chunks.
+For each call, we ask `retriever.top_k(database_id, question, k=5)` for
+the most relevant table chunks and inline them as the schema context.
+
+Few-shot examples and the system instruction are still Northwind-flavored
+because Northwind is the only indexed DB right now. When HR / IPL land,
+both will need to generalize (or be templated per database_id).
 """
+
+from app.core import retriever
 
 SYSTEM_INSTRUCTION = """You are an expert SQLite SQL assistant. Given a schema and a question in natural \
 language, produce a single safe SELECT query and a short explanation.
@@ -16,7 +23,9 @@ no EXTRACT, no NOW(); use strftime, julianday, date()).
 always be written as "Order Details".
 4. Always include LIMIT 100 (or a smaller user-requested limit) unless the user \
 explicitly asks for "all" rows.
-5. Use only the exact column names from the schema below — do not invent columns.
+5. Use only the exact column names from the schema below — do not invent columns. \
+The schema you see is the top-K most relevant tables; if a column you need \
+is not in the schema, prefer to answer with what IS shown rather than guessing.
 6. The Discontinued column on Products is TEXT (values "0" or "1"), not a boolean.
 7. Choose chart_hint as follows:
    - "scalar" — a single number (e.g. COUNT, AVG of one value)
@@ -25,54 +34,6 @@ explicitly asks for "all" rows.
    - "pie"    — parts of a whole with at most 6 categories
    - "table"  — anything else, especially multi-column results
 8. The explanation is one or two short plain-English sentences."""
-
-SCHEMA_TEXT = """SCHEMA — Northwind (SQLite). Row counts shown in parentheses.
-
-- Categories (8) — CategoryID INTEGER PK, CategoryName TEXT, Description TEXT, Picture BLOB
-
-- Customers (93) — CustomerID TEXT PK, CompanyName TEXT, ContactName TEXT, ContactTitle TEXT, \
-Address TEXT, City TEXT, Region TEXT, PostalCode TEXT, Country TEXT, Phone TEXT, Fax TEXT
-
-- Employees (9) — EmployeeID INTEGER PK, LastName TEXT, FirstName TEXT, Title TEXT, \
-TitleOfCourtesy TEXT, BirthDate DATE, HireDate DATE, Address TEXT, City TEXT, Region TEXT, \
-PostalCode TEXT, Country TEXT, HomePhone TEXT, Extension TEXT, Notes TEXT, \
-ReportsTo INTEGER, PhotoPath TEXT
-  FKs: ReportsTo -> Employees.EmployeeID  (self-reference; manager hierarchy)
-
-- Orders (16282) — OrderID INTEGER PK, CustomerID TEXT, EmployeeID INTEGER, \
-OrderDate DATETIME, RequiredDate DATETIME, ShippedDate DATETIME, ShipVia INTEGER, \
-Freight NUMERIC, ShipName TEXT, ShipAddress TEXT, ShipCity TEXT, ShipRegion TEXT, \
-ShipPostalCode TEXT, ShipCountry TEXT
-  FKs: CustomerID -> Customers.CustomerID, EmployeeID -> Employees.EmployeeID, \
-ShipVia -> Shippers.ShipperID
-
-- "Order Details" (609283) — OrderID INTEGER PK, ProductID INTEGER PK, \
-UnitPrice NUMERIC, Quantity INTEGER, Discount REAL
-  FKs: OrderID -> Orders.OrderID, ProductID -> Products.ProductID
-  NOTE: line-revenue = UnitPrice * Quantity * (1 - Discount)
-
-- Products (77) — ProductID INTEGER PK, ProductName TEXT, SupplierID INTEGER, \
-CategoryID INTEGER, QuantityPerUnit TEXT, UnitPrice NUMERIC, UnitsInStock INTEGER, \
-UnitsOnOrder INTEGER, ReorderLevel INTEGER, Discontinued TEXT
-  FKs: SupplierID -> Suppliers.SupplierID, CategoryID -> Categories.CategoryID
-
-- Suppliers (29) — SupplierID INTEGER PK, CompanyName TEXT, ContactName TEXT, \
-ContactTitle TEXT, Address TEXT, City TEXT, Region TEXT, PostalCode TEXT, \
-Country TEXT, Phone TEXT, Fax TEXT, HomePage TEXT
-
-- Shippers (3) — ShipperID INTEGER PK, CompanyName TEXT, Phone TEXT
-
-- Regions (4) — RegionID INTEGER PK, RegionDescription TEXT
-
-- Territories (53) — TerritoryID TEXT PK, TerritoryDescription TEXT, RegionID INTEGER
-  FKs: RegionID -> Regions.RegionID
-
-- EmployeeTerritories (49) — EmployeeID INTEGER PK, TerritoryID TEXT PK
-  FKs: EmployeeID -> Employees.EmployeeID, TerritoryID -> Territories.TerritoryID
-
-- CustomerDemographics (0, EMPTY) — CustomerTypeID TEXT PK, CustomerDesc TEXT
-- CustomerCustomerDemo  (0, EMPTY) — CustomerID TEXT PK, CustomerTypeID TEXT PK
-  NOTE: the two demographics tables are empty — avoid them unless explicitly asked."""
 
 FEW_SHOTS = """EXAMPLES:
 
@@ -97,24 +58,38 @@ A: {
   "chart_hint": "bar"
 }"""
 
+SCHEMA_HEADER = (
+    "RELEVANT SCHEMA — the top tables retrieved by similarity to the question. "
+    "If the table you need is not here, say so in the explanation."
+)
+
+DEFAULT_K = 5
+
 
 def build_prompt(
     question: str,
     database_id: str,
     errors: list[str] | None = None,
+    k: int = DEFAULT_K,
 ) -> tuple[str, str]:
     """Return (system_instruction, user_prompt) for the given question.
-
-    Phase 1 only supports database_id == "northwind".
 
     On retries, pass `errors` — the verbatim DB / safety errors from prior
     attempts. They are inlined into the prompt so the model can see what
     went wrong and avoid repeating itself.
+
+    Raises ValueError if no chunks are indexed for `database_id` — the
+    caller should treat this as a 400 (unknown / unindexed database).
     """
-    if database_id != "northwind":
+    chunks = retriever.top_k(database_id, question, k=k)
+    if not chunks:
         raise ValueError(
-            f"Phase 1 only supports database_id='northwind', got '{database_id}'"
+            f"Unknown database_id={database_id!r}: no schema chunks indexed. "
+            "Run `python -m cli.reindex --db-id <id> --sqlite-path <path>` "
+            "from backend/ to index it first."
         )
+
+    schema_block = "\n\n".join(c.content.rstrip() for c in chunks)
 
     error_block = ""
     if errors:
@@ -125,7 +100,8 @@ def build_prompt(
         )
 
     user_prompt = (
-        f"{SCHEMA_TEXT}\n\n"
+        f"{SCHEMA_HEADER}\n\n"
+        f"{schema_block}\n\n"
         f"{FEW_SHOTS}\n\n"
         f"{error_block}"
         f"Q: {question.strip()}\n"

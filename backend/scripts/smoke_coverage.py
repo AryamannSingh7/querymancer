@@ -17,14 +17,19 @@ Run from backend/:
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import sys
 import time
 from pathlib import Path
 
-from google.genai.errors import ClientError
+# Use the lite model for smokes — separate, much larger free-tier daily
+# quota than gemini-2.5-flash. See smoke_query.py for the rationale.
+os.environ.setdefault("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
-from app.core import llm, prompt
+from google.genai.errors import ClientError  # noqa: E402
+
+from app.core import llm, prompt  # noqa: E402
 
 DB_PATH = Path(__file__).resolve().parents[1] / "databases" / "northwind.db"
 DB_URI = f"file:{DB_PATH.as_posix()}?mode=ro"

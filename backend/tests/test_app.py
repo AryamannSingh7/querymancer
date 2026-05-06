@@ -14,7 +14,9 @@ def test_health():
 def test_query_rejects_unknown_database():
     r = client.post("/query", json={"question": "x", "database_id": "unknown"})
     assert r.status_code == 400
-    assert "northwind" in r.json()["detail"]
+    detail = r.json()["detail"]
+    assert "unknown" in detail.lower()
+    assert "no schema" in detail.lower()
 
 
 def test_query_validates_request():

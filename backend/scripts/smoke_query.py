@@ -7,18 +7,26 @@ worked, and assert `attempts >= 1`.
 Free-tier paced: 13s between calls, plus a 65s window-reset wait on first
 boot to avoid 429s.
 
+Smoke uses gemini-2.5-flash-lite (separate, much larger free-tier daily
+quota) so repeated dev runs don't burn through the 20 RPD on
+gemini-2.5-flash that the live /query path needs. We export
+GEMINI_MODEL before importing app so pydantic-settings picks it up.
+
 Run from backend/:
     .venv/Scripts/python.exe scripts/smoke_query.py
 """
 
 from __future__ import annotations
 
+import os
 import time
 
-from fastapi.testclient import TestClient
-from google.genai.errors import ClientError, ServerError
+os.environ.setdefault("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
-from app.main import app
+from fastapi.testclient import TestClient  # noqa: E402
+from google.genai.errors import ClientError, ServerError  # noqa: E402
+
+from app.main import app  # noqa: E402
 
 QUESTIONS = [
     "How many products are discontinued?",                           # scalar

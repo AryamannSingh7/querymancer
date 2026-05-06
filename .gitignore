@@ -47,6 +47,12 @@ Thumbs.db
 *.log
 logs/
 
+# Playwright MCP test artifacts
+.playwright-mcp/
+
+# Local screenshots from dev/playwright sessions
+/querymancer-*.png
+
 # Eval reports kept in repo are committed deliberately;
 # raw run artifacts under eval/_runs/ are not
 eval/_runs/

@@ -1,0 +1,165 @@
+@import "tailwindcss";
+
+/* ================================================================
+   Querymancer — "Console" theme
+   Deep cool charcoal · electric-lime single accent · all-grotesque
+   No ornaments. Typography and spacing carry the design.
+   ================================================================ */
+
+@theme {
+  /* Single bright accent — used sparingly. Most UI stays greyscale. */
+  --color-accent: #c5f500;
+  --color-accent-soft: #e2fa7a;
+  --color-accent-deep: #8aab00;
+
+  /* State colors */
+  --color-success: #4ade80;
+  --color-warn: #fb923c;
+  --color-error: #f87171;
+
+  /* Base extends zinc — Tailwind's zinc-* utilities cover the rest */
+  --color-base: #09090b;
+  --color-surface: #131316;
+  --color-surface-2: #1d1d22;
+
+  /* Typography — distinctive variable grotesque + clean mono */
+  --font-display: var(--font-bricolage);
+  --font-sans: var(--font-bricolage);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* ----- Base layer ------------------------------------------------ */
+
+html,
+body {
+  background: #09090b;
+  color: #e4e4e7;
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-base);
+}
+
+/* Scrollbars — slim, accent-on-dark */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(197, 245, 0, 0.5);
+}
+
+/* ----- Atmosphere (very subtle) -------------------------------- */
+
+.bg-glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+/* Single soft accent glow at bottom-center — a hint, not a spotlight */
+.bg-glow::before {
+  content: "";
+  position: absolute;
+  bottom: -300px;
+  left: 50%;
+  width: 1200px;
+  height: 600px;
+  background: radial-gradient(
+    closest-side,
+    rgba(197, 245, 0, 0.06),
+    transparent 70%
+  );
+  transform: translateX(-50%);
+  filter: blur(60px);
+}
+
+/* ----- Component primitives ------------------------------------ */
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #71717a;
+}
+
+.eyebrow-accent {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.surface {
+  background: var(--color-surface);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.surface-2 {
+  background: var(--color-surface-2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Hairline rule */
+.hr-soft {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ----- Animations ----------------------------------------------- */
+
+/* SQL appears via clip-path scribe-in — fast, surgical */
+@keyframes scribe-in {
+  0% {
+    clip-path: inset(0 100% 0 0);
+    opacity: 0.4;
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+}
+.scribe-in {
+  animation: scribe-in 0.9s cubic-bezier(0.65, 0.05, 0.36, 1) both;
+}
+
+/* Subtle pulse for the "thinking" indicator */
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.pulse-soft {
+  animation: pulse-soft 1.4s ease-in-out infinite;
+}
+
+/* Hover lift used on suggested-question rows */
+.row-hover {
+  transition: background 0.18s ease, color 0.18s ease,
+    border-color 0.18s ease;
+}
+.row-hover:hover {
+  background: rgba(197, 245, 0, 0.06);
+  border-color: rgba(197, 245, 0, 0.4);
+}

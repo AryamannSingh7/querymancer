@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import query
+from app.routers import query, schema
 
 
 def create_app() -> FastAPI:
@@ -19,6 +19,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(query.router)
+    app.include_router(schema.router)
     return app
 
 

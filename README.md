@@ -2,7 +2,7 @@
 
 **Conversational analytics over multi-schema databases.** Ask a database in plain English, get SQL, results, and visualisations back — with retrieval-augmented schema context, an agentic self-correction loop, and a production-grade safety pipeline so generated SQL never touches anything it shouldn't.
 
-> Status: 🚧 in active development. Phase 0 (scaffolding).
+> Status: 🚧 in active development. Phase 5 — multi-turn + polish (landing page shipped; persistence + multi-turn prompt context next).
 
 ## What it does
 
@@ -68,11 +68,11 @@ You can ask questions across any of them and switch on the fly.
 ## Roadmap
 
 - [x] Phase 0 — repo scaffolding, accounts, plan
-- [ ] Phase 1 — core SQL generation (FastAPI + Gemini, hardcoded schema)
-- [ ] Phase 2 — safety gate + executor + self-correction loop
-- [ ] Phase 3 — schema RAG over pgvector
-- [ ] Phase 4 — Next.js MVP frontend
-- [ ] Phase 5 — multi-turn conversation + polish
+- [x] Phase 1 — core SQL generation (FastAPI + Gemini 2.5 Flash, structured output)
+- [x] Phase 2 — safety gate + read-only executor + self-correction loop
+- [x] Phase 3 — schema RAG over Supabase pgvector
+- [x] Phase 4 — Next.js MVP frontend (chat, schema browser, interactive ERD, mobile)
+- [ ] Phase 5 — multi-turn conversation + polish &nbsp;*(landing page + autoplay trace card shipped; persistence + last-2-turns prompt context still to come)*
 - [ ] Phase 6 — deployment (HF Spaces + Vercel)
 - [ ] Phase 7 — eval suite + docs + demo video
 

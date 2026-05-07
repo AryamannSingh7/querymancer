@@ -18,7 +18,7 @@
   --color-error: #f87171;
 
   /* Base extends zinc — Tailwind's zinc-* utilities cover the rest */
-  --color-base: #09090b;
+  --color-ink: #09090b;
   --color-surface: #131316;
   --color-surface-2: #1d1d22;
 
@@ -42,7 +42,7 @@ body {
 
 ::selection {
   background: var(--color-accent);
-  color: var(--color-base);
+  color: var(--color-ink);
 }
 
 /* Scrollbars — slim, accent-on-dark */
@@ -92,17 +92,17 @@ body {
 
 .eyebrow {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #71717a;
+  color: #a1a1aa; /* zinc-400 — was zinc-500, contrast bump */
 }
 
 .eyebrow-accent {
   font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--color-accent);
@@ -163,3 +163,145 @@ body {
   background: rgba(197, 245, 0, 0.06);
   border-color: rgba(197, 245, 0, 0.4);
 }
+
+/* ----- Landing-only utilities ---------------------------------- */
+
+/* Faint grid backdrop — subtle, technical, not gimmicky */
+.bg-dotgrid {
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.045) 1px,
+    transparent 1px
+  );
+  background-size: 28px 28px;
+  background-position: -1px -1px;
+}
+
+/* Wider edge-glow on the landing — bigger canvas, same restraint */
+.bg-glow-landing {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.bg-glow-landing::before {
+  content: "";
+  position: absolute;
+  top: -200px;
+  left: 50%;
+  width: 1400px;
+  height: 800px;
+  background: radial-gradient(
+    closest-side,
+    rgba(197, 245, 0, 0.07),
+    transparent 70%
+  );
+  transform: translateX(-50%);
+  filter: blur(80px);
+}
+
+/* Marquee-style traveling dot for the pipeline strip */
+@keyframes traverse {
+  0% {
+    left: 0;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    left: 100%;
+    opacity: 0;
+  }
+}
+.traveling-dot {
+  animation: traverse 4s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+/* Coordinated entrance: fades + lifts in. Use with style={{animationDelay}}. */
+@keyframes rise-in {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise {
+  animation: rise-in 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* Subtle horizontal accent reveal — used on the hero "plain" italic underline */
+@keyframes accent-sweep {
+  0% { transform: scaleX(0); transform-origin: left center; }
+  100% { transform: scaleX(1); transform-origin: left center; }
+}
+.accent-sweep {
+  animation: accent-sweep 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* Soft station pulse */
+@keyframes station-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(197, 245, 0, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(197, 245, 0, 0.08);
+  }
+}
+.station-pulse {
+  animation: station-pulse 2s ease-in-out infinite;
+}
+
+/* Number readout — slab-feel using the variable display font's heaviest weight */
+.numeral {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "ss01", "cv11";
+  font-weight: 200;
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+}
+
+/* Capability card hover */
+.cap-card {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  transition: border-color 0.2s ease, transform 0.2s ease,
+    background 0.2s ease;
+}
+.cap-card:hover {
+  border-color: rgba(197, 245, 0, 0.3);
+  background: var(--color-surface-2);
+  transform: translateY(-2px);
+}
+.cap-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg,
+    rgba(197, 245, 0, 0.05),
+    transparent 40%
+  );
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.cap-card:hover::after {
+  opacity: 1;
+}
+
+/* SQL preview tints inside the trace card — manual, lightweight */
+.sql-kw { color: var(--color-accent); }
+.sql-fn { color: #fde68a; }
+.sql-str { color: #fcd34d; }
+.sql-pun { color: #71717a; }

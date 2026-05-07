@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Menu, X } from "lucide-react";
 
 import {
@@ -88,6 +90,20 @@ export default function QuerymancerApp() {
       return trimmed ? `${trimmed} ${text}` : text;
     });
   }, []);
+
+  // Auto-submit a question handed in via ?q= (from the landing hero)
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const handoffConsumed = useRef(false);
+  useEffect(() => {
+    if (handoffConsumed.current) return;
+    const q = searchParams.get("q")?.trim();
+    if (!q) return;
+    handoffConsumed.current = true;
+    void submit(q);
+    router.replace(pathname);
+  }, [searchParams, submit, router, pathname]);
 
   // Close mobile sidebar on Escape
   useEffect(() => {
@@ -217,7 +233,7 @@ function Header({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
       className="relative flex items-center justify-between px-5 sm:px-8 py-4
-                 border-b border-white/[0.06] bg-base/80 backdrop-blur-xl"
+                 border-b border-white/[0.06] bg-ink/80 backdrop-blur-xl"
     >
       <div className="flex items-center gap-3">
         <button
@@ -227,15 +243,21 @@ function Header({
         >
           <Menu className="w-5 h-5" strokeWidth={1.5} />
         </button>
-        <Mark className="w-6 h-6 text-accent" />
-        <div className="leading-tight">
-          <h1 className="text-zinc-100 text-[15px] font-medium tracking-tight">
-            Querymancer
-          </h1>
-          <p className="text-[10px] tracking-[0.18em] uppercase text-zinc-500 mt-0.5 font-mono">
-            natural language → sql
-          </p>
-        </div>
+        <Link
+          href="/"
+          className="flex items-center gap-3 group"
+          aria-label="Back to Querymancer landing"
+        >
+          <Mark className="w-6 h-6 text-accent transition-transform group-hover:scale-110" />
+          <div className="leading-tight">
+            <h1 className="text-zinc-50 text-[15px] font-medium tracking-tight group-hover:text-accent transition-colors">
+              Querymancer
+            </h1>
+            <p className="text-[10px] tracking-[0.18em] uppercase text-zinc-400 mt-0.5 font-mono">
+              natural language → sql
+            </p>
+          </div>
+        </Link>
       </div>
 
       <nav className="flex items-center gap-4 sm:gap-6 text-[11px] font-mono">
@@ -247,7 +269,7 @@ function Header({
           backend online
         </span>
         <span className="text-zinc-500 tracking-[0.18em] uppercase whitespace-nowrap">
-          v0.4 · phase iv
+          v0.5 · phase v
         </span>
       </nav>
     </motion.header>

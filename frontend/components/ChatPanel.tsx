@@ -169,7 +169,7 @@ function Composer({
   onSubmit: (e: FormEvent) => void;
 }) {
   return (
-    <div className="border-t border-white/[0.06] bg-base/80 backdrop-blur-xl">
+    <div className="border-t border-white/[0.06] bg-ink/80 backdrop-blur-xl">
       <div className="max-w-2xl mx-auto px-6 py-5">
         <form onSubmit={onSubmit} className="relative">
           <div
@@ -198,7 +198,7 @@ function Composer({
               type="submit"
               disabled={!draft.trim() || loading}
               className="flex items-center justify-center w-8 h-8 rounded-md
-                         bg-accent text-base hover:bg-accent-soft
+                         bg-accent text-ink hover:bg-accent-soft
                          disabled:bg-zinc-800 disabled:text-zinc-600
                          disabled:cursor-not-allowed transition-all"
               aria-label="Send"

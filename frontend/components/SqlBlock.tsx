@@ -55,7 +55,7 @@ export default function SqlBlock({ sql, animateIn = true }: SqlBlockProps) {
 
   return (
     <figure className="relative surface rounded-lg overflow-hidden">
-      <header className="flex items-center justify-between px-4 py-2 border-b border-white/[0.06] bg-base/40">
+      <header className="flex items-center justify-between px-4 py-2 border-b border-white/[0.06] bg-ink/40">
         <span className="eyebrow-accent">sql</span>
         <button
           onClick={onCopy}

@@ -6,9 +6,16 @@ Tests that actually want to inspect retrieval behaviour can override
 the fixture by monkeypatching `app.core.prompt.retriever.top_k`
 themselves inside the test body (the override wins because pytest
 applies fixture monkeypatches before the test function runs).
+
+`mock_sessions` does the same for the session-persistence layer. It
+hands back a fresh session id on every `ensure_session`, an empty
+recent_turns list, and swallows `append_turn` writes — keeping the
+router path off Supabase during unit tests.
 """
 
 from __future__ import annotations
+
+import itertools
 
 import pytest
 
@@ -56,3 +63,32 @@ def mock_retriever(monkeypatch):
         return []
 
     monkeypatch.setattr("app.core.prompt.retriever.top_k", fake_top_k)
+
+
+@pytest.fixture(autouse=True)
+def mock_sessions(monkeypatch):
+    """Stub session persistence — no Supabase contact during unit tests.
+
+    `ensure_session` returns the incoming session_id when present
+    (so tests asserting "the same session is reused" stay honest) and
+    a deterministic `test-session-N` otherwise.
+
+    `recent_turns` defaults to [], so the prompt builder's PRIOR TURNS
+    block stays empty unless a test explicitly overrides it.
+
+    `append_turn` is a no-op.
+    """
+    counter = itertools.count(1)
+
+    def fake_ensure_session(session_id, database_id):
+        return session_id or f"test-session-{next(counter)}"
+
+    def fake_recent_turns(session_id, n=2):
+        return []
+
+    def fake_append_turn(**kwargs):
+        return None
+
+    monkeypatch.setattr("app.routers.query.sessions.ensure_session", fake_ensure_session)
+    monkeypatch.setattr("app.routers.query.sessions.recent_turns", fake_recent_turns)
+    monkeypatch.setattr("app.routers.query.sessions.append_turn", fake_append_turn)

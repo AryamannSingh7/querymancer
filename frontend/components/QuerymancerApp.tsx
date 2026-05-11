@@ -28,6 +28,7 @@ function newId() {
 export default function QuerymancerApp() {
   const [databaseId, setDatabaseId] = useState("northwind");
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState("");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -35,6 +36,20 @@ export default function QuerymancerApp() {
   const replaceTurn = useCallback((id: string, next: Turn) => {
     setTurns((prev) => prev.map((t) => (t.id === id ? next : t)));
   }, []);
+
+  // Switching database starts a fresh conversation. A session is bound
+  // to one database_id on the backend; inlining prior turns from a
+  // different schema would only confuse the model.
+  const onChooseDatabase = useCallback(
+    (next: string) => {
+      if (next === databaseId) return;
+      setDatabaseId(next);
+      setTurns([]);
+      setSessionId(null);
+      setDraft("");
+    },
+    [databaseId],
+  );
 
   const submit = useCallback(
     async (question: string) => {
@@ -45,7 +60,16 @@ export default function QuerymancerApp() {
       setDraft("");
 
       try {
-        const response = await postQuery({ question, database_id: databaseId });
+        const response = await postQuery({
+          question,
+          database_id: databaseId,
+          session_id: sessionId ?? undefined,
+        });
+        // Pin the session id on the very first successful turn; reuse
+        // for the rest of the conversation.
+        if (response.session_id && response.session_id !== sessionId) {
+          setSessionId(response.session_id);
+        }
         replaceTurn(id, { id, kind: "success", question, response });
       } catch (err) {
         if (err instanceof AgentExhaustedError) {
@@ -73,7 +97,7 @@ export default function QuerymancerApp() {
         setLoading(false);
       }
     },
-    [databaseId, replaceTurn],
+    [databaseId, sessionId, replaceTurn],
   );
 
   const onChooseQuestion = useCallback(
@@ -136,7 +160,7 @@ export default function QuerymancerApp() {
           >
             <Sidebar
               databaseId={databaseId}
-              onChooseDatabase={setDatabaseId}
+              onChooseDatabase={onChooseDatabase}
               onChooseQuestion={onChooseQuestion}
               onInsertSnippet={insertSnippet}
             />
@@ -206,7 +230,7 @@ export default function QuerymancerApp() {
             <Sidebar
               databaseId={databaseId}
               onChooseDatabase={(id) => {
-                setDatabaseId(id);
+                onChooseDatabase(id);
                 setMobileSidebarOpen(false);
               }}
               onChooseQuestion={onChooseQuestion}

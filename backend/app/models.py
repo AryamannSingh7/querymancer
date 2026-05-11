@@ -15,6 +15,7 @@ class ChartHint(str, Enum):
 class QueryRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
     database_id: str = Field(min_length=1, max_length=64)
+    session_id: str | None = Field(default=None, max_length=64)
 
 
 class LLMOutput(BaseModel):
@@ -36,3 +37,4 @@ class QueryResponse(BaseModel):
     columns: list[str] = Field(default_factory=list)
     rows: list[list[Any]] = Field(default_factory=list)
     attempts: int = 1
+    session_id: str

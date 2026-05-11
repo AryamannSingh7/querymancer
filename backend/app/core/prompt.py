@@ -10,6 +10,7 @@ both will need to generalize (or be templated per database_id).
 """
 
 from app.core import retriever
+from app.core.sessions import TurnSnippet
 
 SYSTEM_INSTRUCTION = """You are an expert SQLite SQL assistant. Given a schema and a question in natural \
 language, produce a single safe SELECT query and a short explanation.
@@ -66,10 +67,34 @@ SCHEMA_HEADER = (
 DEFAULT_K = 5
 
 
+def _format_prior_turns(turns: list[TurnSnippet]) -> str:
+    """Render the most-recent-first turn list as a PRIOR TURNS block.
+
+    Newest is shown last (T-2 then T-1) so the model reads them in
+    conversational order — the question right above Q: is the most
+    recent. Older turns sit further away, matching natural recency.
+    """
+    if not turns:
+        return ""
+    ordered = list(reversed(turns))  # oldest first → newest last
+    lines = [
+        "PRIOR TURNS — the user may be following up. Resolve pronouns "
+        "(\"those\", \"them\", \"that one\") and implicit references against "
+        "the most recent turn shown below."
+    ]
+    for offset, t in enumerate(ordered):
+        idx = len(ordered) - offset  # T-2, T-1, ...
+        lines.append(f"  T-{idx}:")
+        lines.append(f"    Q: {t.question.strip()}")
+        lines.append(f"    SQL: {t.sql.strip()}")
+    return "\n".join(lines) + "\n\n"
+
+
 def build_prompt(
     question: str,
     database_id: str,
     errors: list[str] | None = None,
+    recent_turns: list[TurnSnippet] | None = None,
     k: int = DEFAULT_K,
 ) -> tuple[str, str]:
     """Return (system_instruction, user_prompt) for the given question.
@@ -77,6 +102,10 @@ def build_prompt(
     On retries, pass `errors` — the verbatim DB / safety errors from prior
     attempts. They are inlined into the prompt so the model can see what
     went wrong and avoid repeating itself.
+
+    For follow-up turns, pass `recent_turns` — the most-recent-first list
+    of prior (question, sql) pairs from this session. They are inlined
+    as a PRIOR TURNS block so the model can resolve pronouns.
 
     Raises ValueError if no chunks are indexed for `database_id` — the
     caller should treat this as a 400 (unknown / unindexed database).
@@ -91,6 +120,8 @@ def build_prompt(
 
     schema_block = "\n\n".join(c.content.rstrip() for c in chunks)
 
+    prior_turns_block = _format_prior_turns(recent_turns or [])
+
     error_block = ""
     if errors:
         formatted = "\n".join(f"  attempt {i + 1}: {e}" for i, e in enumerate(errors))
@@ -103,6 +134,7 @@ def build_prompt(
         f"{SCHEMA_HEADER}\n\n"
         f"{schema_block}\n\n"
         f"{FEW_SHOTS}\n\n"
+        f"{prior_turns_block}"
         f"{error_block}"
         f"Q: {question.strip()}\n"
         f"A:"

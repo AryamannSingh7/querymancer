@@ -23,6 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.core import executor, llm, prompt, safety
+from app.core.sessions import TurnSnippet
 from app.models import ChartHint
 
 
@@ -45,13 +46,22 @@ class AgentError(Exception):
         self.errors = errors
 
 
-def run(question: str, database_id: str, *, max_attempts: int = 3) -> AgentResult:
+def run(
+    question: str,
+    database_id: str,
+    *,
+    recent_turns: list[TurnSnippet] | None = None,
+    max_attempts: int = 3,
+) -> AgentResult:
     errors: list[str] = []
 
     for attempt in range(1, max_attempts + 1):
         # build_prompt validates database_id; let its ValueError propagate.
         system_instruction, user_prompt = prompt.build_prompt(
-            question, database_id, errors=errors or None
+            question,
+            database_id,
+            errors=errors or None,
+            recent_turns=recent_turns,
         )
 
         resp = llm.generate_sql(prompt_text=user_prompt, system_instruction=system_instruction)

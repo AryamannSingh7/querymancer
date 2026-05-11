@@ -5,6 +5,9 @@ export type ChartHint = "table" | "bar" | "line" | "pie" | "scalar";
 export interface QueryRequest {
   question: string;
   database_id: string;
+  // Omit on the first turn; the server returns one. Pass it back on
+  // every follow-up so the backend can inline last 2 turns into the prompt.
+  session_id?: string;
 }
 
 export interface QueryResponse {
@@ -14,6 +17,7 @@ export interface QueryResponse {
   columns: string[];
   rows: unknown[][];
   attempts: number;
+  session_id: string;
 }
 
 // Shape of the 422 detail body when the agent exhausts all retries

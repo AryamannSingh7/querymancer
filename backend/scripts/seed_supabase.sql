@@ -55,8 +55,44 @@ CREATE TRIGGER trg_schema_embeddings_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION public.set_updated_at();
 
--- 7. Sanity check — the SQL Editor will show this as the result of the run.
+-- 7. sessions / turns — Phase 5 multi-turn persistence.
+--    Each `/query` POST belongs to a session; the session is created on
+--    the first turn and reused for follow-ups. We persist every turn for
+--    observability (latency, attempts) and to inline the last 2 turns
+--    into future prompts as "PRIOR TURNS" context.
+--
+--    UUIDs are generated server-side by the backend (uuid.uuid4) and
+--    passed in as text, so we don't need pgcrypto or gen_random_uuid().
+CREATE TABLE IF NOT EXISTS public.sessions (
+    id           TEXT        PRIMARY KEY,
+    database_id  TEXT        NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_database_id
+    ON public.sessions (database_id);
+
+CREATE TABLE IF NOT EXISTS public.turns (
+    id           TEXT        PRIMARY KEY,
+    session_id   TEXT        NOT NULL REFERENCES public.sessions(id) ON DELETE CASCADE,
+    question     TEXT        NOT NULL,
+    sql          TEXT        NOT NULL,
+    rows_count   INTEGER     NOT NULL,
+    attempts     INTEGER     NOT NULL,
+    latency_ms   INTEGER     NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Recent-turns retrieval scans turns by (session_id, created_at DESC LIMIT 2).
+CREATE INDEX IF NOT EXISTS idx_turns_session_created
+    ON public.turns (session_id, created_at DESC);
+
+ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.turns    ENABLE ROW LEVEL SECURITY;
+
+-- 8. Sanity check — the SQL Editor will show this as the result of the run.
 SELECT
     'schema_embeddings ready' AS status,
-    COUNT(*)                  AS existing_row_count
-FROM public.schema_embeddings;
+    (SELECT COUNT(*) FROM public.schema_embeddings) AS schema_chunks,
+    (SELECT COUNT(*) FROM public.sessions)          AS sessions_count,
+    (SELECT COUNT(*) FROM public.turns)             AS turns_count;

@@ -1,12 +1,15 @@
+import logging
 import re
+import time
 
 from fastapi import APIRouter, HTTPException, status
 from google.genai.errors import ClientError, ServerError
 
-from app.core import agent
+from app.core import agent, sessions
 from app.models import QueryRequest, QueryResponse
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _retry_seconds(detail_text: str) -> int | None:
@@ -17,8 +20,15 @@ def _retry_seconds(detail_text: str) -> int | None:
 
 @router.post("/query", response_model=QueryResponse)
 def post_query(req: QueryRequest) -> QueryResponse:
+    # Resolve or create a session BEFORE the agent runs so the response
+    # always has a session_id, even on failure paths (router currently
+    # returns errors, not partial responses — but the contract is cleaner).
+    session_id = sessions.ensure_session(req.session_id, req.database_id)
+    prior = sessions.recent_turns(session_id, n=2)
+
+    started = time.perf_counter()
     try:
-        result = agent.run(req.question, req.database_id)
+        result = agent.run(req.question, req.database_id, recent_turns=prior)
     except ValueError as e:
         # unknown database_id from build_prompt
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -69,6 +79,22 @@ def post_query(req: QueryRequest) -> QueryResponse:
             },
         )
 
+    latency_ms = int((time.perf_counter() - started) * 1000)
+
+    # Persistence is best-effort: a Supabase blip after a successful agent
+    # run must not fail the user's query. We log and move on.
+    try:
+        sessions.append_turn(
+            session_id=session_id,
+            question=req.question,
+            sql=result.sql,
+            rows_count=len(result.rows),
+            attempts=result.attempts,
+            latency_ms=latency_ms,
+        )
+    except Exception:  # noqa: BLE001 — intentional swallow, logged
+        logger.exception("failed to persist turn for session %s", session_id)
+
     return QueryResponse(
         sql=result.sql,
         explanation=result.explanation,
@@ -76,4 +102,5 @@ def post_query(req: QueryRequest) -> QueryResponse:
         columns=result.columns,
         rows=[list(r) for r in result.rows],
         attempts=result.attempts,
+        session_id=session_id,
     )

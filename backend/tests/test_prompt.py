@@ -38,3 +38,36 @@ def test_error_history_inlined_on_retry():
 def test_empty_errors_list_does_not_inject_block():
     _, user = prompt.build_prompt("anything", "northwind", errors=[])
     assert "PRIOR ATTEMPTS FAILED" not in user
+
+
+def test_no_prior_turns_omits_block():
+    _, user = prompt.build_prompt("anything", "northwind")
+    assert "PRIOR TURNS" not in user
+
+    _, user2 = prompt.build_prompt("anything", "northwind", recent_turns=[])
+    assert "PRIOR TURNS" not in user2
+
+
+def test_prior_turns_inlined_newest_last():
+    from app.core.sessions import TurnSnippet
+
+    # sessions.recent_turns returns newest-first; the builder should
+    # reverse so older shows higher in the prompt and newest sits
+    # right above the current Q.
+    recent = [
+        TurnSnippet(question="Top 5 customers by orders", sql="SELECT c.CompanyName ..."),
+        TurnSnippet(question="How many customers in Germany?", sql="SELECT COUNT(*) ..."),
+    ]
+    _, user = prompt.build_prompt(
+        "And what countries are they in?",
+        "northwind",
+        recent_turns=recent,
+    )
+    assert "PRIOR TURNS" in user
+    # newest turn (Top 5...) should appear AFTER the older one (Germany count)
+    assert user.index("How many customers in Germany?") < user.index("Top 5 customers by orders")
+    # both SQL snippets and questions present
+    assert "SELECT c.CompanyName ..." in user
+    assert "SELECT COUNT(*) ..." in user
+    # the PRIOR TURNS block sits before the current question
+    assert user.index("PRIOR TURNS") < user.index("And what countries are they in?")

@@ -8,7 +8,7 @@ import { Menu, X } from "lucide-react";
 
 import {
   AgentExhaustedError,
-  postQuery,
+  postQueryStream,
   UnknownDatabaseError,
   UpstreamError,
 } from "@/lib/api";
@@ -59,12 +59,37 @@ export default function QuerymancerApp() {
       setLoading(true);
       setDraft("");
 
+      // Live attempt indicator: as stream events arrive, mutate the
+      // pending Turn so ChatPanel can render "self-correcting…
+      // attempt N of 3 — fixing: <reason>".
+      const onAttemptStart = (attempt: number) => {
+        setTurns((prev) =>
+          prev.map((t) =>
+            t.id === id && t.kind === "pending"
+              ? { ...t, currentAttempt: attempt }
+              : t,
+          ),
+        );
+      };
+      const onAttemptFail = (attempt: number, reason: string) => {
+        setTurns((prev) =>
+          prev.map((t) =>
+            t.id === id && t.kind === "pending"
+              ? { ...t, currentAttempt: attempt, lastReason: reason }
+              : t,
+          ),
+        );
+      };
+
       try {
-        const response = await postQuery({
-          question,
-          database_id: databaseId,
-          session_id: sessionId ?? undefined,
-        });
+        const response = await postQueryStream(
+          {
+            question,
+            database_id: databaseId,
+            session_id: sessionId ?? undefined,
+          },
+          { onAttemptStart, onAttemptFail },
+        );
         // Pin the session id on the very first successful turn; reuse
         // for the rest of the conversation.
         if (response.session_id && response.session_id !== sessionId) {

@@ -148,3 +148,58 @@ def test_unknown_database_id_does_not_loop(monkeypatch):
     with pytest.raises(ValueError):
         agent.run("any", "unknown_db")
     assert called["n"] == 0
+
+
+# ---- run_iter (Phase 5 streaming) ----
+
+
+def test_run_iter_yields_attempt_started_then_final(monkeypatch):
+    monkeypatch.setattr(
+        "app.core.agent.llm.generate_sql",
+        lambda prompt_text, system_instruction: _resp(
+            "SELECT CustomerID FROM Customers LIMIT 1"
+        ),
+    )
+    events = list(agent.run_iter("any", "northwind"))
+    kinds = [e.kind for e in events]
+    assert kinds == ["attempt_started", "final"]
+    assert events[0].attempt == 1
+    final = events[-1]
+    assert final.result is not None
+    assert final.result.attempts == 1
+    assert len(final.result.rows) == 1
+
+
+def test_run_iter_emits_attempt_failed_then_succeeds(monkeypatch):
+    sequence = iter(
+        [
+            _resp("DROP TABLE Customers"),                       # safety reject
+            _resp("SELECT CustomerID FROM Customers LIMIT 1"),   # ok
+        ]
+    )
+    monkeypatch.setattr(
+        "app.core.agent.llm.generate_sql",
+        lambda prompt_text, system_instruction: next(sequence),
+    )
+    events = list(agent.run_iter("any", "northwind"))
+    kinds = [e.kind for e in events]
+    assert kinds == [
+        "attempt_started",
+        "attempt_failed",
+        "attempt_started",
+        "final",
+    ]
+    failed = events[1]
+    assert failed.attempt == 1
+    assert failed.reason is not None and "safety" in failed.reason
+
+
+def test_run_iter_raises_after_max_attempts(monkeypatch):
+    monkeypatch.setattr(
+        "app.core.agent.llm.generate_sql",
+        lambda prompt_text, system_instruction: _resp("DROP TABLE Customers"),
+    )
+    with pytest.raises(agent.AgentError) as exc:
+        list(agent.run_iter("any", "northwind", max_attempts=3))
+    assert exc.value.attempts == 3
+    assert len(exc.value.errors) == 3

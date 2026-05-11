@@ -94,6 +94,41 @@ function Welcome() {
   );
 }
 
+function PendingStatus({
+  turn,
+}: {
+  turn: Extract<Turn, { kind: "pending" }>;
+}) {
+  const attempt = turn.currentAttempt ?? 0;
+  const selfCorrecting = attempt > 1;
+
+  return (
+    <div className="ml-9 space-y-1.5">
+      <div className="flex items-center gap-2.5 text-[13px]">
+        <Loader2
+          className={`w-3.5 h-3.5 animate-spin ${
+            selfCorrecting ? "text-warn" : "text-accent"
+          }`}
+          strokeWidth={1.5}
+        />
+        <span
+          className={`eyebrow pulse-soft ${
+            selfCorrecting ? "text-warn" : "text-zinc-500"
+          }`}
+        >
+          {selfCorrecting ? "self-correcting" : "thinking"}
+          {attempt > 0 ? ` · attempt ${attempt} of 3` : null}
+        </span>
+      </div>
+      {turn.lastReason ? (
+        <p className="pl-[26px] text-[11px] font-mono text-zinc-500 leading-snug max-w-[34rem] break-words">
+          fixing: {turn.lastReason}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function TurnView({ turn }: { turn: Turn }) {
   return (
     <article className="space-y-4">
@@ -109,15 +144,7 @@ function TurnView({ turn }: { turn: Turn }) {
       </header>
 
       {/* Backend response */}
-      {turn.kind === "pending" && (
-        <div className="ml-9 flex items-center gap-2.5 text-zinc-500 text-[13px]">
-          <Loader2
-            className="w-3.5 h-3.5 animate-spin text-accent"
-            strokeWidth={1.5}
-          />
-          <span className="eyebrow pulse-soft">thinking</span>
-        </div>
-      )}
+      {turn.kind === "pending" && <PendingStatus turn={turn} />}
 
       {turn.kind === "success" && (
         <div className="ml-9 space-y-4">

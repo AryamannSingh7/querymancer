@@ -54,6 +54,10 @@ export type Turn =
       id: string;
       kind: "pending";
       question: string;
+      // Set by the /query/stream consumer as attempt events arrive.
+      // Drives the "self-correcting… attempt N of 3" indicator.
+      currentAttempt?: number;
+      lastReason?: string;
     }
   | {
       id: string;

@@ -7,6 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     gemini_api_key: str
     gemini_model: str = "gemini-2.5-flash"
+    # Cheaper model for offline jobs (schema-indexer table descriptions).
+    # Live /query stays on flash; lite preserves the 20 RPD flash budget.
+    gemini_indexer_model: str = "gemini-2.5-flash-lite"
     embed_model: str = "gemini-embedding-001"
     embed_dim: int = 768
     supabase_db_url: str = ""

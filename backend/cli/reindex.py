@@ -147,7 +147,7 @@ def _generate_description(table: str, columns: list[dict]) -> str:
     try:
         from google.genai import types as genai_types
         response = llm_client().models.generate_content(
-            model=get_settings().gemini_model,
+            model=get_settings().gemini_indexer_model,
             contents=prompt,
             config=genai_types.GenerateContentConfig(temperature=0.0),
         )

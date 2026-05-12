@@ -1,0 +1,28 @@
+name: keepalive
+
+# HF Spaces on the free tier pause after ~48 hours of no traffic. This
+# workflow pings /health every 6 hours (well inside the 48h window even
+# with GitHub's best-effort scheduling delays) to keep the Space warm.
+#
+# A request to a paused Space wakes it — the curl below tolerates a cold
+# start of up to 120s via --max-time and retries twice on failure.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *" # 04:17, 10:17, 16:17, 22:17 UTC
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping HF Space /health
+        run: |
+          curl --fail-with-body \
+               --max-time 120 \
+               --retry 2 \
+               --retry-delay 30 \
+               --retry-all-errors \
+               -sS \
+               https://asinghby-querymancer-backend.hf.space/health
+          echo

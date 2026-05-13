@@ -1,0 +1,1085 @@
+# Querymancer eval suite
+#
+# 150 questions across 3 databases (northwind, hr, ipl). Each case is graded
+# by row-count: rows_count must satisfy expected_min_rows <= n <= expected_max_rows.
+# expected_columns_subset and must_contain_value are advisory — reported as
+# "soft" assertions but they do not gate overall success.
+#
+# Difficulty:
+#   simple  — single table, single aggregate / filter / count
+#   medium  — 1-2 JOINs, GROUP BY, ORDER BY + LIMIT
+#   hard    — 3+ JOINs, subquery, window function, CTE, or tricky semantics
+#
+# Author: keep expected_min/max generous unless the question forces a tight bound
+# (e.g. "top 5" → max=5; "list categories" → exactly 8).
+
+# =============================================================================
+# Northwind — classic ecommerce schema (customers, orders, order details,
+# products, suppliers, employees, categories, shippers, regions, territories)
+# =============================================================================
+
+- id: nw_001
+  database_id: northwind
+  question: "How many customers are there?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: nw_002
+  database_id: northwind
+  question: "How many products do we sell?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: nw_003
+  database_id: northwind
+  question: "List all product categories."
+  expected_min_rows: 8
+  expected_max_rows: 8
+  expected_columns_subset: ["CategoryName"]
+  difficulty: simple
+
+- id: nw_004
+  database_id: northwind
+  question: "How many products are discontinued?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: nw_005
+  database_id: northwind
+  question: "List all shipping companies."
+  expected_min_rows: 3
+  expected_max_rows: 3
+  difficulty: simple
+
+- id: nw_006
+  database_id: northwind
+  question: "What is the most expensive product's unit price?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: nw_007
+  database_id: northwind
+  question: "How many employees do we have?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: nw_008
+  database_id: northwind
+  question: "How many suppliers do we work with?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: nw_009
+  database_id: northwind
+  question: "What is the average freight cost across all orders?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: nw_010
+  database_id: northwind
+  question: "How many products are out of stock?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: nw_011
+  database_id: northwind
+  question: "Show me the top 5 countries by number of customers."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  expected_columns_subset: ["Country"]
+  difficulty: medium
+
+- id: nw_012
+  database_id: northwind
+  question: "How many products are in each category?"
+  expected_min_rows: 8
+  expected_max_rows: 8
+  difficulty: medium
+
+- id: nw_013
+  database_id: northwind
+  question: "How many orders did each shipper handle?"
+  expected_min_rows: 3
+  expected_max_rows: 3
+  difficulty: medium
+
+- id: nw_014
+  database_id: northwind
+  question: "List the top 10 products by units in stock."
+  expected_min_rows: 10
+  expected_max_rows: 10
+  difficulty: medium
+
+- id: nw_015
+  database_id: northwind
+  question: "How many orders has each employee handled?"
+  expected_min_rows: 1
+  expected_max_rows: 9
+  difficulty: medium
+
+- id: nw_016
+  database_id: northwind
+  question: "Show me products in the Beverages category."
+  expected_min_rows: 1
+  expected_max_rows: 20
+  difficulty: medium
+
+- id: nw_017
+  database_id: northwind
+  question: "How many customers are based in Germany?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: medium
+
+- id: nw_018
+  database_id: northwind
+  question: "Which suppliers are based in the USA?"
+  expected_min_rows: 1
+  expected_max_rows: 30
+  expected_columns_subset: ["CompanyName"]
+  difficulty: medium
+
+- id: nw_019
+  database_id: northwind
+  question: "List products that cost less than $20."
+  expected_min_rows: 1
+  expected_max_rows: 77
+  difficulty: medium
+
+- id: nw_020
+  database_id: northwind
+  question: "Show the number of orders placed in each year."
+  expected_min_rows: 1
+  expected_max_rows: 20
+  difficulty: medium
+
+- id: nw_021
+  database_id: northwind
+  question: "Top 5 products by total revenue."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: nw_022
+  database_id: northwind
+  question: "Which customer has placed the most orders?"
+  expected_min_rows: 1
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: nw_023
+  database_id: northwind
+  question: "Show total revenue by category."
+  expected_min_rows: 8
+  expected_max_rows: 8
+  difficulty: hard
+
+- id: nw_024
+  database_id: northwind
+  question: "List products that have never been ordered."
+  expected_min_rows: 0
+  expected_max_rows: 77
+  difficulty: hard
+
+- id: nw_025
+  database_id: northwind
+  question: "Top 10 customers by total spending."
+  expected_min_rows: 10
+  expected_max_rows: 10
+  difficulty: hard
+
+- id: nw_026
+  database_id: northwind
+  question: "Show monthly order count for 2023."
+  expected_min_rows: 1
+  expected_max_rows: 12
+  difficulty: hard
+
+- id: nw_027
+  database_id: northwind
+  question: "Which employee has generated the highest total sales revenue?"
+  expected_min_rows: 1
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: nw_028
+  database_id: northwind
+  question: "List the top product in each category by revenue."
+  expected_min_rows: 8
+  expected_max_rows: 8
+  difficulty: hard
+
+- id: nw_029
+  database_id: northwind
+  question: "How many customers have never placed an order?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: hard
+
+- id: nw_030
+  database_id: northwind
+  question: "Average order value (sum of line items) per customer, top 5."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: nw_031
+  database_id: northwind
+  question: "Which countries have more than 5 customers?"
+  expected_min_rows: 1
+  expected_max_rows: 30
+  difficulty: medium
+
+- id: nw_032
+  database_id: northwind
+  question: "Show employees with their managers' names."
+  expected_min_rows: 1
+  expected_max_rows: 9
+  difficulty: hard
+
+- id: nw_033
+  database_id: northwind
+  question: "Total quantity sold per product, top 10."
+  expected_min_rows: 10
+  expected_max_rows: 10
+  difficulty: hard
+
+- id: nw_034
+  database_id: northwind
+  question: "Which suppliers provide more than 3 products?"
+  expected_min_rows: 1
+  expected_max_rows: 29
+  difficulty: hard
+
+- id: nw_035
+  database_id: northwind
+  question: "How many distinct countries do we ship to?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: nw_036
+  database_id: northwind
+  question: "List employees hired before 2020."
+  expected_min_rows: 1
+  expected_max_rows: 9
+  difficulty: medium
+
+- id: nw_037
+  database_id: northwind
+  question: "Show average unit price per category."
+  expected_min_rows: 8
+  expected_max_rows: 8
+  difficulty: medium
+
+- id: nw_038
+  database_id: northwind
+  question: "Products that need reordering (UnitsInStock below ReorderLevel)."
+  expected_min_rows: 0
+  expected_max_rows: 77
+  difficulty: medium
+
+- id: nw_039
+  database_id: northwind
+  question: "Top 3 most expensive products."
+  expected_min_rows: 3
+  expected_max_rows: 3
+  difficulty: simple
+
+- id: nw_040
+  database_id: northwind
+  question: "Count orders shipped vs not yet shipped."
+  expected_min_rows: 1
+  expected_max_rows: 3
+  difficulty: medium
+
+- id: nw_041
+  database_id: northwind
+  question: "Average days between order and ship date."
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: hard
+
+- id: nw_042
+  database_id: northwind
+  question: "Top 5 cities by number of customers."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: medium
+
+- id: nw_043
+  database_id: northwind
+  question: "Which category has the highest total revenue?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: hard
+
+- id: nw_044
+  database_id: northwind
+  question: "List customers whose company name starts with A."
+  expected_min_rows: 1
+  expected_max_rows: 93
+  difficulty: simple
+
+- id: nw_045
+  database_id: northwind
+  question: "Show number of orders per quarter in 2022."
+  expected_min_rows: 1
+  expected_max_rows: 4
+  difficulty: hard
+
+- id: nw_046
+  database_id: northwind
+  question: "Show total revenue by year."
+  expected_min_rows: 1
+  expected_max_rows: 20
+  difficulty: hard
+
+- id: nw_047
+  database_id: northwind
+  question: "Rank products by revenue within each category."
+  expected_min_rows: 50
+  expected_max_rows: 77
+  difficulty: hard
+
+- id: nw_048
+  database_id: northwind
+  question: "Top 5 customers by order count in 2023."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: nw_049
+  database_id: northwind
+  question: "Which products have a discount applied on at least one order?"
+  expected_min_rows: 1
+  expected_max_rows: 77
+  difficulty: medium
+
+- id: nw_050
+  database_id: northwind
+  question: "Average freight cost by shipping country, top 10."
+  expected_min_rows: 1
+  expected_max_rows: 10
+  difficulty: hard
+
+# =============================================================================
+# HR — employees, departments, job titles, salary history, performance reviews,
+# time-off requests, dependents
+# =============================================================================
+
+- id: hr_001
+  database_id: hr
+  question: "How many employees do we have?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: hr_002
+  database_id: hr
+  question: "How many active employees are there?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: hr_003
+  database_id: hr
+  question: "List all departments."
+  expected_min_rows: 8
+  expected_max_rows: 8
+  difficulty: simple
+
+- id: hr_004
+  database_id: hr
+  question: "How many job titles are there?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: hr_005
+  database_id: hr
+  question: "How many dependents are registered?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: hr_006
+  database_id: hr
+  question: "How many time off requests are pending?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: hr_007
+  database_id: hr
+  question: "Gender breakdown of employees."
+  expected_min_rows: 2
+  expected_max_rows: 5
+  difficulty: simple
+
+- id: hr_008
+  database_id: hr
+  question: "How many employees were hired in 2024?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: hr_009
+  database_id: hr
+  question: "What's the average performance rating?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: hr_010
+  database_id: hr
+  question: "Count time-off requests by leave type."
+  expected_min_rows: 4
+  expected_max_rows: 4
+  difficulty: simple
+
+- id: hr_011
+  database_id: hr
+  question: "How many employees are in each department?"
+  expected_min_rows: 8
+  expected_max_rows: 8
+  difficulty: medium
+
+- id: hr_012
+  database_id: hr
+  question: "List employees in the Engineering department."
+  expected_min_rows: 1
+  expected_max_rows: 250
+  difficulty: medium
+
+- id: hr_013
+  database_id: hr
+  question: "Show the top 5 highest paid employees right now."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: hr_014
+  database_id: hr
+  question: "Average salary by department."
+  expected_min_rows: 8
+  expected_max_rows: 8
+  difficulty: hard
+
+- id: hr_015
+  database_id: hr
+  question: "How many employees were hired each year?"
+  expected_min_rows: 1
+  expected_max_rows: 15
+  difficulty: medium
+
+- id: hr_016
+  database_id: hr
+  question: "Top 3 departments by headcount."
+  expected_min_rows: 3
+  expected_max_rows: 3
+  difficulty: medium
+
+- id: hr_017
+  database_id: hr
+  question: "List employees who have no manager."
+  expected_min_rows: 1
+  expected_max_rows: 50
+  difficulty: medium
+
+- id: hr_018
+  database_id: hr
+  question: "Employees with more than 2 dependents."
+  expected_min_rows: 1
+  expected_max_rows: 250
+  difficulty: hard
+
+- id: hr_019
+  database_id: hr
+  question: "Average rating per department, ranked."
+  expected_min_rows: 8
+  expected_max_rows: 8
+  difficulty: hard
+
+- id: hr_020
+  database_id: hr
+  question: "Time-off requests breakdown by status."
+  expected_min_rows: 3
+  expected_max_rows: 3
+  difficulty: simple
+
+- id: hr_021
+  database_id: hr
+  question: "Who are the top 3 managers by number of direct reports?"
+  expected_min_rows: 1
+  expected_max_rows: 3
+  difficulty: hard
+
+- id: hr_022
+  database_id: hr
+  question: "Employees whose current salary is above the company average."
+  expected_min_rows: 1
+  expected_max_rows: 250
+  difficulty: hard
+
+- id: hr_023
+  database_id: hr
+  question: "Top 5 most recent hires."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: medium
+
+- id: hr_024
+  database_id: hr
+  question: "How many employees have ever taken sick leave?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: medium
+
+- id: hr_025
+  database_id: hr
+  question: "Show employees with their job titles."
+  expected_min_rows: 1
+  expected_max_rows: 250
+  difficulty: medium
+
+- id: hr_026
+  database_id: hr
+  question: "Average review rating for each rating level (1 through 5)."
+  expected_min_rows: 1
+  expected_max_rows: 5
+  difficulty: medium
+
+- id: hr_027
+  database_id: hr
+  question: "Show me employees with both a sick and a PTO request."
+  expected_min_rows: 0
+  expected_max_rows: 250
+  difficulty: hard
+
+- id: hr_028
+  database_id: hr
+  question: "Department with the highest total budget."
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: medium
+
+- id: hr_029
+  database_id: hr
+  question: "Total approved time-off days per leave type."
+  expected_min_rows: 1
+  expected_max_rows: 4
+  difficulty: hard
+
+- id: hr_030
+  database_id: hr
+  question: "Employees ranked by salary within their department, top by dept."
+  expected_min_rows: 8
+  expected_max_rows: 8
+  difficulty: hard
+
+- id: hr_031
+  database_id: hr
+  question: "How many job titles in each job family?"
+  expected_min_rows: 1
+  expected_max_rows: 10
+  difficulty: simple
+
+- id: hr_032
+  database_id: hr
+  question: "Average tenure (years since hire) of active employees."
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: hard
+
+- id: hr_033
+  database_id: hr
+  question: "Employees hired in 2023, with their department."
+  expected_min_rows: 1
+  expected_max_rows: 250
+  difficulty: medium
+
+- id: hr_034
+  database_id: hr
+  question: "Count of reviews per reviewer, top 5."
+  expected_min_rows: 1
+  expected_max_rows: 5
+  difficulty: medium
+
+- id: hr_035
+  database_id: hr
+  question: "Average rating for each department, descending."
+  expected_min_rows: 8
+  expected_max_rows: 8
+  difficulty: hard
+
+- id: hr_036
+  database_id: hr
+  question: "Top 5 highest rated employees by average rating."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: hr_037
+  database_id: hr
+  question: "Departments with average salary above $80,000."
+  expected_min_rows: 0
+  expected_max_rows: 8
+  difficulty: hard
+
+- id: hr_038
+  database_id: hr
+  question: "Employees who have never had a performance review."
+  expected_min_rows: 0
+  expected_max_rows: 250
+  difficulty: hard
+
+- id: hr_039
+  database_id: hr
+  question: "Salary change history for employee 1."
+  expected_min_rows: 1
+  expected_max_rows: 50
+  difficulty: medium
+
+- id: hr_040
+  database_id: hr
+  question: "Approval rate of time-off requests (percentage)."
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: hard
+
+- id: hr_041
+  database_id: hr
+  question: "Count employees by status."
+  expected_min_rows: 2
+  expected_max_rows: 2
+  difficulty: simple
+
+- id: hr_042
+  database_id: hr
+  question: "List inactive employees."
+  expected_min_rows: 1
+  expected_max_rows: 250
+  difficulty: simple
+
+- id: hr_043
+  database_id: hr
+  question: "Number of dependents per employee, top 5."
+  expected_min_rows: 1
+  expected_max_rows: 5
+  difficulty: medium
+
+- id: hr_044
+  database_id: hr
+  question: "Distinct job titles in the Engineering department."
+  expected_min_rows: 1
+  expected_max_rows: 30
+  difficulty: medium
+
+- id: hr_045
+  database_id: hr
+  question: "Average days requested per leave type, approved only."
+  expected_min_rows: 1
+  expected_max_rows: 4
+  difficulty: hard
+
+- id: hr_046
+  database_id: hr
+  question: "Employees who got a raise (salary increased) at least once."
+  expected_min_rows: 0
+  expected_max_rows: 250
+  difficulty: hard
+
+- id: hr_047
+  database_id: hr
+  question: "Largest single salary increase ever granted."
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: hard
+
+- id: hr_048
+  database_id: hr
+  question: "How many employees have at least 3 performance reviews?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: hard
+
+- id: hr_049
+  database_id: hr
+  question: "List the youngest 5 employees by birth date."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: medium
+
+- id: hr_050
+  database_id: hr
+  question: "Department headcount as a percentage of total."
+  expected_min_rows: 8
+  expected_max_rows: 8
+  difficulty: hard
+
+# =============================================================================
+# IPL — teams, players, matches, innings scorecards, bowling figures, venues,
+# seasons (2020-2024), match squads
+# =============================================================================
+
+- id: ipl_001
+  database_id: ipl
+  question: "How many teams are in the league?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: ipl_002
+  database_id: ipl
+  question: "List all teams."
+  expected_min_rows: 10
+  expected_max_rows: 10
+  expected_columns_subset: ["name"]
+  difficulty: simple
+
+- id: ipl_003
+  database_id: ipl
+  question: "How many players are registered?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: ipl_004
+  database_id: ipl
+  question: "List all venues."
+  expected_min_rows: 12
+  expected_max_rows: 12
+  difficulty: simple
+
+- id: ipl_005
+  database_id: ipl
+  question: "Count players by role."
+  expected_min_rows: 4
+  expected_max_rows: 4
+  difficulty: simple
+
+- id: ipl_006
+  database_id: ipl
+  question: "How many overseas players are there?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: ipl_007
+  database_id: ipl
+  question: "How many matches in total?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: ipl_008
+  database_id: ipl
+  question: "How many seasons are stored?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: ipl_009
+  database_id: ipl
+  question: "How many finals are in the data?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: ipl_010
+  database_id: ipl
+  question: "List distinct batting styles."
+  expected_min_rows: 1
+  expected_max_rows: 10
+  difficulty: simple
+
+- id: ipl_011
+  database_id: ipl
+  question: "Matches played at each venue."
+  expected_min_rows: 1
+  expected_max_rows: 12
+  difficulty: medium
+
+- id: ipl_012
+  database_id: ipl
+  question: "Top 5 run scorers across all seasons."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: ipl_013
+  database_id: ipl
+  question: "Top 5 wicket takers across all seasons."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: ipl_014
+  database_id: ipl
+  question: "Toss decision distribution (bat vs field)."
+  expected_min_rows: 2
+  expected_max_rows: 2
+  difficulty: simple
+
+- id: ipl_015
+  database_id: ipl
+  question: "How many matches did Mumbai Indians play?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: medium
+
+- id: ipl_016
+  database_id: ipl
+  question: "How many matches did Chennai Super Kings win?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: medium
+
+- id: ipl_017
+  database_id: ipl
+  question: "Top scoring innings ever (single batter)."
+  expected_min_rows: 1
+  expected_max_rows: 5
+  difficulty: medium
+
+- id: ipl_018
+  database_id: ipl
+  question: "List Royal Challengers Bengaluru's roster."
+  expected_min_rows: 1
+  expected_max_rows: 50
+  difficulty: medium
+
+- id: ipl_019
+  database_id: ipl
+  question: "Matches per season."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: simple
+
+- id: ipl_020
+  database_id: ipl
+  question: "Top 5 venues by matches hosted."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: medium
+
+- id: ipl_021
+  database_id: ipl
+  question: "Which team has won the most titles?"
+  expected_min_rows: 1
+  expected_max_rows: 2
+  must_contain_value: "Mumbai Indians"
+  difficulty: medium
+
+- id: ipl_022
+  database_id: ipl
+  question: "Best bowling figures (most wickets in a match)."
+  expected_min_rows: 1
+  expected_max_rows: 10
+  difficulty: medium
+
+- id: ipl_023
+  database_id: ipl
+  question: "Top 5 batters by total sixes."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: ipl_024
+  database_id: ipl
+  question: "Average runs per innings."
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: simple
+
+- id: ipl_025
+  database_id: ipl
+  question: "How many centuries (runs >= 100 in an innings)?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: medium
+
+- id: ipl_026
+  database_id: ipl
+  question: "How many half-centuries (50-99 runs)?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: medium
+
+- id: ipl_027
+  database_id: ipl
+  question: "Top 5 bowlers by economy (min 20 overs bowled)."
+  expected_min_rows: 1
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: ipl_028
+  database_id: ipl
+  question: "Dismissal type breakdown."
+  expected_min_rows: 1
+  expected_max_rows: 10
+  difficulty: simple
+
+- id: ipl_029
+  database_id: ipl
+  question: "Top batter of each season by total runs."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: ipl_030
+  database_id: ipl
+  question: "Win count per team across all seasons."
+  expected_min_rows: 1
+  expected_max_rows: 10
+  difficulty: medium
+
+- id: ipl_031
+  database_id: ipl
+  question: "List captains."
+  expected_min_rows: 1
+  expected_max_rows: 200
+  difficulty: medium
+
+- id: ipl_032
+  database_id: ipl
+  question: "How many matches were decided by 10 or more wickets?"
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: medium
+
+- id: ipl_033
+  database_id: ipl
+  question: "Top 5 highest team totals in any innings."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: ipl_034
+  database_id: ipl
+  question: "Head-to-head: Mumbai Indians vs Chennai Super Kings — wins for each."
+  expected_min_rows: 1
+  expected_max_rows: 3
+  difficulty: hard
+
+- id: ipl_035
+  database_id: ipl
+  question: "Win percentage when winning the toss."
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: hard
+
+- id: ipl_036
+  database_id: ipl
+  question: "Top 3 wicketkeepers by dismissals (caught + stumped credited to them)."
+  expected_min_rows: 1
+  expected_max_rows: 3
+  difficulty: hard
+
+- id: ipl_037
+  database_id: ipl
+  question: "Players from India only."
+  expected_min_rows: 1
+  expected_max_rows: 160
+  difficulty: simple
+
+- id: ipl_038
+  database_id: ipl
+  question: "Number of overs bowled by each bowler, top 5."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: medium
+
+- id: ipl_039
+  database_id: ipl
+  question: "Average score at Wankhede Stadium per innings."
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: hard
+
+- id: ipl_040
+  database_id: ipl
+  question: "Who won the 2024 final?"
+  expected_min_rows: 1
+  expected_max_rows: 5
+  must_contain_value: "Kolkata Knight Riders"
+  difficulty: hard
+
+- id: ipl_041
+  database_id: ipl
+  question: "Bowlers with at least 5 wickets in an innings."
+  expected_min_rows: 1
+  expected_max_rows: 100
+  difficulty: medium
+
+- id: ipl_042
+  database_id: ipl
+  question: "Top 5 strike rates among batters with at least 100 balls faced."
+  expected_min_rows: 1
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: ipl_043
+  database_id: ipl
+  question: "Matches per season grouped by match type."
+  expected_min_rows: 1
+  expected_max_rows: 25
+  difficulty: medium
+
+- id: ipl_044
+  database_id: ipl
+  question: "Top scoring batter of season 2023."
+  expected_min_rows: 1
+  expected_max_rows: 5
+  difficulty: hard
+
+- id: ipl_045
+  database_id: ipl
+  question: "Total sixes per season."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: medium
+
+- id: ipl_046
+  database_id: ipl
+  question: "How many matches did each venue host in 2024?"
+  expected_min_rows: 1
+  expected_max_rows: 12
+  difficulty: medium
+
+- id: ipl_047
+  database_id: ipl
+  question: "Number of all-rounders per team (based on roster)."
+  expected_min_rows: 1
+  expected_max_rows: 10
+  difficulty: hard
+
+- id: ipl_048
+  database_id: ipl
+  question: "Players who have captained at least 5 matches."
+  expected_min_rows: 1
+  expected_max_rows: 50
+  difficulty: hard
+
+- id: ipl_049
+  database_id: ipl
+  question: "Average win margin in runs for matches won batting first."
+  expected_min_rows: 1
+  expected_max_rows: 1
+  difficulty: hard
+
+- id: ipl_050
+  database_id: ipl
+  question: "Top 5 dot ball bowlers across all matches."
+  expected_min_rows: 5
+  expected_max_rows: 5
+  difficulty: hard

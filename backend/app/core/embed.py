@@ -14,7 +14,6 @@ Asymmetric retrieval: documents (chunks) are embedded with
 embedding model is trained to project the two into the same space.
 """
 
-from functools import lru_cache
 from math import sqrt
 
 from google import genai
@@ -23,8 +22,13 @@ from google.genai import types
 from app.core.config import get_settings
 
 
-@lru_cache(maxsize=1)
 def _client() -> genai.Client:
+    # NOTE: do not cache. The google-genai SDK holds an internal httpx.Client
+    # whose lifecycle is fragile under repeated/threadpool use — after some
+    # requests it lands in CLOSED state and every subsequent call raises
+    # "Cannot send a request, as the client has been closed". A fresh
+    # Client per call costs ~milliseconds and is invisible against the
+    # ~seconds spent in the embed/generate roundtrip.
     return genai.Client(api_key=get_settings().gemini_api_key)
 
 
@@ -37,7 +41,14 @@ def _normalize(vec: list[float]) -> list[float]:
 
 def _embed_batch(texts: list[str], task_type: str) -> list[list[float]]:
     settings = get_settings()
-    response = _client().models.embed_content(
+    # Bind the Client to a local variable BEFORE the chained method call.
+    # `_client().models.embed_content(...)` would let CPython release the
+    # temporary Client before the embedded request finishes, and the SDK
+    # closes its httpx pool on Client GC — every call then fails with
+    # "Cannot send a request, as the client has been closed". Keeping the
+    # local reference alive across the call is the (tiny, ugly, necessary) fix.
+    client = _client()
+    response = client.models.embed_content(
         model=settings.embed_model,
         contents=texts,
         config=types.EmbedContentConfig(

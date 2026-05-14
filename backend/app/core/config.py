@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     embed_model: str = "gemini-embedding-001"
     embed_dim: int = 768
     supabase_db_url: str = ""
+    # Groq runtime fallback. Empty key disables the fallback — generate_sql
+    # then propagates Gemini's 429/5xx upstream like before. When set, the
+    # eval and live /query keep working after Gemini's daily cap is hit.
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
 
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[2] / ".env",

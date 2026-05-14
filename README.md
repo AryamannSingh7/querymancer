@@ -22,7 +22,7 @@
 
 <br/>
 
-<img src="querymancer-desktop-final.png" alt="Querymancer desktop UI" width="900"/>
+<img src="docs/screenshots/querymancer-desktop-final.png" alt="Querymancer desktop UI" width="900"/>
 
 </div>
 
@@ -120,16 +120,16 @@ Switch DBs from the sidebar. Each switch resets the conversation — sessions ar
 
 <table>
   <tr>
-    <td><img src="querymancer-erd-customers-highlight.png" alt="Interactive ERD" width="430"/></td>
-    <td><img src="querymancer-schema-tab.png" alt="Schema browser" width="430"/></td>
+    <td><img src="docs/screenshots/querymancer-erd-customers-highlight.png" alt="Interactive ERD" width="430"/></td>
+    <td><img src="docs/screenshots/querymancer-schema-tab.png" alt="Schema browser" width="430"/></td>
   </tr>
   <tr>
     <td align="center"><sub><b>Interactive ERD</b> — React Flow + dagre. Click a table to focus its joins; click a column to insert <code>Table.column</code> into the prompt.</sub></td>
     <td align="center"><sub><b>Schema browser</b> — collapsible per-table view with PK / FK highlighting and "REFERENCED BY" sections.</sub></td>
   </tr>
   <tr>
-    <td><img src="querymancer-try-tab.png" alt="Curated questions" width="430"/></td>
-    <td><img src="querymancer-mobile.png" alt="Mobile layout" width="430"/></td>
+    <td><img src="docs/screenshots/querymancer-try-tab.png" alt="Curated questions" width="430"/></td>
+    <td><img src="docs/screenshots/querymancer-mobile.png" alt="Mobile layout" width="430"/></td>
   </tr>
   <tr>
     <td align="center"><sub><b>Curated starters</b> — 8 hand-tuned questions per DB to seed exploration.</sub></td>

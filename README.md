@@ -1,24 +1,43 @@
+<div align="center">
+
 # Querymancer
 
-**Conversational analytics over multi-schema databases.** Ask a database in plain English, get SQL, results, and visualisations back — with retrieval-augmented schema context, an agentic self-correction loop, a production-grade safety pipeline so generated SQL never touches anything it shouldn't, and a Gemini-primary / Groq-fallback LLM strategy that keeps the system answering even when free-tier quotas blow up.
+### Conversational analytics over multi-schema databases
 
-**Live demo:** [querymancer.vercel.app](https://querymancer.vercel.app)
-**Backend:** [asinghby-querymancer-backend.hf.space](https://asinghby-querymancer-backend.hf.space)
+**Ask a database in plain English. Get safe SQL, live results, and the right chart back — with retrieval-augmented schema context, an agentic self-correction loop, and a Gemini-primary / Groq-fallback LLM strategy that keeps the system answering through free-tier quota walls.**
 
-![Querymancer desktop UI](querymancer-desktop-final.png)
+<p>
+  <a href="https://querymancer.vercel.app"><img alt="Live demo" src="https://img.shields.io/badge/live%20demo-querymancer.vercel.app-c5f500?style=for-the-badge&logo=vercel&logoColor=000000&labelColor=000000"></a>
+  <a href="https://asinghby-querymancer-backend.hf.space/docs"><img alt="API" src="https://img.shields.io/badge/api-hf%20space-FFD21E?style=for-the-badge&logo=huggingface&logoColor=000000&labelColor=000000"></a>
+  <a href="docs/architecture.md"><img alt="Architecture" src="https://img.shields.io/badge/architecture-docs-7c3aed?style=for-the-badge&labelColor=000000"></a>
+</p>
 
-## What it does
+<p>
+  <img alt="backend ci" src="https://img.shields.io/github/actions/workflow/status/AryamannSingh7/querymancer/backend-ci.yml?branch=main&label=backend%20ci&style=flat-square&logo=github&labelColor=222">
+  <img alt="frontend ci" src="https://img.shields.io/github/actions/workflow/status/AryamannSingh7/querymancer/frontend-ci.yml?branch=main&label=frontend%20ci&style=flat-square&logo=github&labelColor=222">
+  <img alt="python" src="https://img.shields.io/badge/python-3.11-3776AB?style=flat-square&logo=python&logoColor=white&labelColor=222">
+  <img alt="next.js" src="https://img.shields.io/badge/next.js-16-000?style=flat-square&logo=nextdotjs&labelColor=222">
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-c5f500?style=flat-square&labelColor=222">
+</p>
 
-You type *"which 5 products generated the most revenue last quarter?"* against one of the bundled databases. Querymancer:
+<br/>
 
-1. **Retrieves** the relevant table and column descriptions for your question via vector search over schema embeddings (RAG, top-K=5).
-2. **Generates** SQL with an LLM, returning a structured response that includes the query, an explanation, and a suggested chart type. Falls back from Gemini to Groq automatically when free-tier quota is exhausted.
-3. **Validates** the SQL through a multi-layer safety gate (sqlglot AST parse → keyword denylist → single-statement check → auto-`LIMIT` injection).
-4. **Executes** it against a read-only SQLite connection with a 5-second timeout and a 1000-row cap.
-5. **Self-corrects** if execution fails — the verbatim DB error is fed back into the next prompt attempt, up to 3 retries. The frontend renders this live via a streaming NDJSON endpoint.
-6. **Renders** results as a table plus an auto-selected chart (bar, line, pie, scalar) — whichever matches the result shape.
+<img src="querymancer-desktop-final.png" alt="Querymancer desktop UI" width="900"/>
 
-Multi-turn refinement is built in: ask a follow-up like *"now break it down by category"* and the system resolves it against the prior turns from the same session.
+</div>
+
+<br/>
+
+## Highlights
+
+|  |  |  |
+|---|---|---|
+| **RAG over schema** | **Agentic self-correction** | **Defense-in-depth safety** |
+| Top-K pgvector retrieval surfaces only the tables that matter, so 13-table databases don't blow the prompt window. Asymmetric `task_type` (DOCUMENT vs QUERY) and 768-d MRL-renormalised vectors. | When generated SQL fails to execute, the verbatim DB error is fed back into the next attempt (max 3). Most failures fix themselves on attempt 2 — streamed live to the frontend as it happens. | Two independent layers: `sqlglot` AST + denylist + single-statement + auto-`LIMIT`, *and* the connection itself opens `mode=ro`. Layer 1 can't be bypassed by stacked-statement or comment-injection tricks. |
+| **Gemini → Groq fallback** | **Multi-turn refinement** | **Production-grade eval** |
+| When Gemini's free-tier daily cap hits, `llm.generate_sql` automatically retries the same prompt against Groq Llama 3.3 70B. The demo stays live on quota days. | Sessions persist to Supabase; the last 2 turns get inlined into the prompt. Ask *"now break that down by category"* and the model resolves the pronoun against the previous SQL. | 150-case async eval harness grades by row-count assertion across 3 DBs and 3 difficulty tiers. Writes dated markdown reports incrementally — Ctrl-C leaves a valid partial. |
+
+<br/>
 
 ## Architecture
 
@@ -32,31 +51,56 @@ flowchart LR
     LLM -. "429 / 5xx" .-> GROQ["Groq Llama 3.3 70B"]
     AGENT --> SAFE["sqlglot AST<br/>+ denylist<br/>+ LIMIT"]
     SAFE --> EXEC["SQLite<br/>(mode=ro, 5s)"]
-    EXEC -- "error" --> AGENT
-    API -- "append_turn" --> SESS[("Supabase<br/>sessions/turns")]
+    EXEC -- "SQLiteError" --> AGENT
+    API -- "append_turn" --> SESS[("Supabase<br/>sessions / turns")]
 ```
 
-Full diagrams, the /query sequence with the fallback decision, the safety pipeline, the multi-turn design, and the module map live in [`docs/architecture.md`](docs/architecture.md).
+The full component diagram, the `/query` sequence with the fallback decision branch, the safety-pipeline detail, the RAG chunk format, the multi-turn design, the streaming-endpoint protocol, and the module map all live in **[`docs/architecture.md`](docs/architecture.md)**.
+
+<br/>
 
 ## Tech stack
 
-| Layer | Choice |
-|---|---|
-| LLM (primary) | Google Gemini 2.5 Flash, structured output via `response_schema` |
-| LLM (fallback) | Groq Llama 3.3 70B, JSON mode, fires only on Gemini 429 / 5xx |
-| Embeddings | `gemini-embedding-001` (768 dims, MRL renormalised, asymmetric task_type) |
-| Vector store | Supabase Postgres + `pgvector` 0.8.0 (HNSW cosine index) |
-| Sessions | Supabase Postgres tables (`sessions`, `turns`) |
-| Sample databases | SQLite, bundled in the Docker image, opened `mode=ro` |
-| SQL safety | `sqlglot` AST validation + keyword denylist + single-statement enforcement |
-| Backend | FastAPI (Python 3.11) on Hugging Face Spaces (Docker SDK, CPU basic) |
-| Frontend | Next.js 16 (App Router) + React 19 + Tailwind v4 + Framer Motion |
-| ERD / schema viz | React Flow + dagre |
-| Charts | Recharts |
-| Frontend hosting | Vercel Hobby (GitHub auto-deploy) |
-| CI | GitHub Actions (backend tests, frontend build, HF Space keepalive) |
+<p><b>LLM &amp; vectors</b></p>
+<p>
+  <img alt="Gemini" src="https://img.shields.io/badge/Gemini_2.5_Flash-1A73E8?style=flat-square&logo=googlegemini&logoColor=white">
+  <img alt="Groq" src="https://img.shields.io/badge/Groq_Llama_3.3_70B-F55036?style=flat-square&logo=meta&logoColor=white">
+  <img alt="gemini-embedding-001" src="https://img.shields.io/badge/gemini--embedding--001-4285F4?style=flat-square&logo=google&logoColor=white">
+  <img alt="pgvector" src="https://img.shields.io/badge/pgvector-0.8-336791?style=flat-square&logo=postgresql&logoColor=white">
+</p>
 
-Every component is on a permanent free tier — no credit card required.
+<p><b>Backend</b></p>
+<p>
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white">
+  <img alt="Python" src="https://img.shields.io/badge/Python_3.11-3776AB?style=flat-square&logo=python&logoColor=white">
+  <img alt="Pydantic" src="https://img.shields.io/badge/Pydantic_v2-E92063?style=flat-square&logo=pydantic&logoColor=white">
+  <img alt="sqlglot" src="https://img.shields.io/badge/sqlglot-AST_safety-222?style=flat-square">
+  <img alt="SQLite" src="https://img.shields.io/badge/SQLite-mode%3Dro-003B57?style=flat-square&logo=sqlite&logoColor=white">
+  <img alt="Supabase" src="https://img.shields.io/badge/Supabase-Postgres-3FCF8E?style=flat-square&logo=supabase&logoColor=white">
+</p>
+
+<p><b>Frontend</b></p>
+<p>
+  <img alt="Next.js" src="https://img.shields.io/badge/Next.js_16-000?style=flat-square&logo=nextdotjs&logoColor=white">
+  <img alt="React" src="https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=000">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white">
+  <img alt="Tailwind" src="https://img.shields.io/badge/Tailwind_v4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white">
+  <img alt="React Flow" src="https://img.shields.io/badge/React_Flow-ERD-FF0072?style=flat-square">
+  <img alt="Recharts" src="https://img.shields.io/badge/Recharts-charts-22c55e?style=flat-square">
+  <img alt="Framer Motion" src="https://img.shields.io/badge/Framer_Motion-0055FF?style=flat-square&logo=framer&logoColor=white">
+</p>
+
+<p><b>Infra &amp; CI</b></p>
+<p>
+  <img alt="HF Spaces" src="https://img.shields.io/badge/Hugging_Face_Spaces-FFD21E?style=flat-square&logo=huggingface&logoColor=000">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-CPU_basic-2496ED?style=flat-square&logo=docker&logoColor=white">
+  <img alt="Vercel" src="https://img.shields.io/badge/Vercel-000?style=flat-square&logo=vercel&logoColor=white">
+  <img alt="GitHub Actions" src="https://img.shields.io/badge/GitHub_Actions-CI%20%2B%20keepalive-2088FF?style=flat-square&logo=githubactions&logoColor=white">
+</p>
+
+Every component is on a permanent free tier. Zero-dollar budget was a hard constraint, not a stretch goal.
+
+<br/>
 
 ## Sample databases
 
@@ -68,78 +112,115 @@ Three pre-loaded demo databases ship in the backend image, all opened read-only:
 | `hr` | 7 | ~1.7K | HR analytics — employees, departments, salaries, performance |
 | `ipl` | 8 | ~16.8K | IPL cricket — matches, deliveries, players, teams, venues |
 
-Switch DBs from the sidebar in the UI. Each switch resets the conversation (sessions are bound to one schema).
+Switch DBs from the sidebar. Each switch resets the conversation — sessions are bound to one schema.
 
-## Screenshots
+<br/>
 
-| | |
-|---|---|
-| ![Schema browser](querymancer-schema-tab.png) | ![Interactive ERD](querymancer-erd-customers-highlight.png) |
-| Schema browser — collapsible table list with FK links | Interactive ERD — click a table to focus its joins |
-| ![Mobile](querymancer-mobile.png) | ![Suggested questions](querymancer-try-tab.png) |
-| Mobile layout — full feature parity below `md` | Curated starter questions per DB |
+## In the UI
 
-## Local setup
+<table>
+  <tr>
+    <td><img src="querymancer-erd-customers-highlight.png" alt="Interactive ERD" width="430"/></td>
+    <td><img src="querymancer-schema-tab.png" alt="Schema browser" width="430"/></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Interactive ERD</b> — React Flow + dagre. Click a table to focus its joins; click a column to insert <code>Table.column</code> into the prompt.</sub></td>
+    <td align="center"><sub><b>Schema browser</b> — collapsible per-table view with PK / FK highlighting and "REFERENCED BY" sections.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="querymancer-try-tab.png" alt="Curated questions" width="430"/></td>
+    <td><img src="querymancer-mobile.png" alt="Mobile layout" width="430"/></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Curated starters</b> — 8 hand-tuned questions per DB to seed exploration.</sub></td>
+    <td align="center"><sub><b>Mobile-native</b> — slide-in drawer, full feature parity below the <code>md</code> breakpoint.</sub></td>
+  </tr>
+</table>
 
-Backend (Python 3.11):
+<br/>
+
+## Quickstart
 
 ```bash
-cd backend
-python -m venv .venv && .venv/Scripts/activate     # Windows
-# python -m venv .venv && source .venv/bin/activate  # POSIX
+# 1. clone and enter backend
+git clone https://github.com/AryamannSingh7/querymancer.git
+cd querymancer/backend
+
+# 2. python deps + env
+python -m venv .venv && .venv/Scripts/activate    # Windows
+# python -m venv .venv && source .venv/bin/activate   # POSIX
 pip install -e ".[dev]"
-cp .env.example .env                                # then fill in GEMINI_API_KEY,
-                                                    # SUPABASE_DB_URL, optionally GROQ_API_KEY
+cp .env.example .env    # then fill GEMINI_API_KEY, SUPABASE_DB_URL, optionally GROQ_API_KEY
+
+# 3. run backend
 python -m uvicorn app.main:app --reload
 ```
 
-Frontend (Node 20):
-
 ```bash
-cd frontend
+# 4. frontend in another terminal
+cd ../frontend
 npm ci
 BACKEND_URL=http://127.0.0.1:8000 npm run dev
 # open http://localhost:3000
 ```
 
-Index a new SQLite database into pgvector:
+<details>
+<summary><b>Other useful commands</b></summary>
 
 ```bash
-cd backend
-python -m cli.reindex --db-id <id> --sqlite-path databases/<file>.db
-```
+# index a new SQLite DB into pgvector
+cd backend && python -m cli.reindex --db-id <id> --sqlite-path databases/<file>.db
 
-Run the unit suite (no live LLM / Supabase calls — `conftest.py` stubs both):
+# unit tests (no live LLM / Supabase — conftest stubs both)
+cd backend && pytest -q
 
-```bash
-cd backend
-pytest -q
-```
-
-Run the eval suite against a live backend (writes a dated markdown report under `eval/reports/`):
-
-```bash
+# eval against a running backend
 python eval/run_eval.py --backend http://127.0.0.1:8000 --concurrency 2
-# subset filters: --only-db hr, --only-difficulty hard, --limit-per-db 10
+# subset filters:
+#   --only-db hr            --only-difficulty hard            --limit-per-db 10
 ```
 
-## Eval status
+</details>
 
-The eval harness (`eval/run_eval.py`) grades 150 cases across the 3 sample DBs by row-count assertion and writes a dated markdown report with pass rate, per-DB and per-difficulty breakdowns, latency p50/p95/p99, and failure modes grouped (`UPSTREAM_LLM`, `ASSERTION_FAILED`, `SQL_INVALID`, `TIMEOUT`).
+<br/>
 
-Baseline numbers are being collected across multiple days because the combined free-tier budget (Gemini 20 RPD + Groq 100K TPD ≈ 40-50 successful cases/day with our prompt size) doesn't fit 150 cases in one session. The final aggregate report will land at `eval/reports/` once HR and IPL slices complete.
+## Eval
+
+The eval harness (`eval/run_eval.py`) grades 150 cases across 3 DBs and 3 difficulty tiers by row-count assertion. Each report includes:
+
+- pass rate (overall, per-DB, per-difficulty)
+- latency `p50` / `p95` / `p99` (client-side, what users feel)
+- attempt distribution — how often the self-correction loop kicks in
+- failure modes grouped (`UPSTREAM_LLM`, `ASSERTION_FAILED`, `SQL_INVALID`, `TIMEOUT`)
+- delta vs previous run
+
+Reports are written incrementally — Ctrl-C leaves a valid partial behind.
+
+> **Baseline status:** numbers are being collected across multiple days. The combined free-tier budget (Gemini 20 RPD + Groq 100K TPD) fits roughly 40-50 successful cases per day at our prompt size — the full 150-case aggregate will land at `eval/reports/` once the HR and IPL slices complete.
+
+<br/>
 
 ## Roadmap
 
-- [x] Phase 0 — repo scaffolding, accounts, plan
-- [x] Phase 1 — core SQL generation (FastAPI + Gemini 2.5 Flash, structured output)
-- [x] Phase 2 — safety gate + read-only executor + self-correction loop
-- [x] Phase 3 — schema RAG over Supabase pgvector
-- [x] Phase 4 — Next.js frontend (chat, schema browser, interactive ERD, mobile)
-- [x] Phase 5 — multi-turn sessions + live "self-correcting…" UX + landing page
-- [x] Phase 6 — deployment (HF Spaces + Vercel) + GitHub Actions CI + Groq fallback
-- [ ] Phase 7 — eval baseline (in progress, paced across multiple days due to free-tier quotas), demo video
+| Phase | Scope | Status |
+|---|---|---|
+| 0 | Repo scaffolding, accounts, plan | shipped |
+| 1 | Core SQL generation — FastAPI + Gemini 2.5 Flash, structured output | shipped |
+| 2 | Safety gate + read-only executor + self-correction loop | shipped |
+| 3 | Schema RAG over Supabase pgvector | shipped |
+| 4 | Next.js frontend — chat, schema browser, interactive ERD, mobile | shipped |
+| 5 | Multi-turn sessions + live "self-correcting…" UX + landing page | shipped |
+| 6 | Deployment (HF Spaces + Vercel) + GitHub Actions CI + Groq fallback | shipped |
+| 7 | Eval baseline (in progress, paced across multiple days for free-tier quotas), demo video | in progress |
+
+<br/>
 
 ## License
 
 MIT.
+
+<br/>
+
+<div align="center">
+  <sub>Built by <a href="https://github.com/AryamannSingh7">@AryamannSingh7</a> · <a href="https://querymancer.vercel.app">querymancer.vercel.app</a></sub>
+</div>

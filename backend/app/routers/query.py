@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import time
+import uuid
 from collections.abc import Iterator
 
 from fastapi import APIRouter, HTTPException, status
@@ -9,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from google.genai.errors import ClientError, ServerError
 
 from app.core import agent, sessions
+from app.core.sessions import TurnSnippet
 from app.models import QueryRequest, QueryResponse
 
 router = APIRouter()
@@ -21,13 +23,38 @@ def _retry_seconds(detail_text: str) -> int | None:
     return int(float(match.group(1))) if match else None
 
 
+def _resolve_session_safely(
+    session_id: str | None, database_id: str
+) -> tuple[str, list[TurnSnippet], bool]:
+    """Resolve session + prior turns, degrading gracefully on Supabase outages.
+
+    Returns (session_id, prior_turns, persistent). When `persistent` is False
+    the session layer was unreachable — the caller has a synthetic session id
+    so the response stays well-formed, but `append_turn` should be skipped
+    (no Postgres → nothing to write to). Multi-turn context is lost for that
+    request, which is the right tradeoff: a user-facing 200 with no history
+    beats a 500 from a transient pooler DNS hiccup.
+    """
+    try:
+        sid = sessions.ensure_session(session_id, database_id)
+        prior = sessions.recent_turns(sid, n=2)
+        return sid, prior, True
+    except Exception:  # noqa: BLE001 — degraded mode, see docstring
+        logger.exception(
+            "session layer unavailable; falling back to transient session"
+        )
+        return str(uuid.uuid4()), [], False
+
+
 @router.post("/query", response_model=QueryResponse)
 def post_query(req: QueryRequest) -> QueryResponse:
     # Resolve or create a session BEFORE the agent runs so the response
-    # always has a session_id, even on failure paths (router currently
-    # returns errors, not partial responses — but the contract is cleaner).
-    session_id = sessions.ensure_session(req.session_id, req.database_id)
-    prior = sessions.recent_turns(session_id, n=2)
+    # always has a session_id, even on failure paths. If the session
+    # layer is unreachable, fall back to a transient session (no
+    # persistence this turn) rather than 500ing on a Supabase blip.
+    session_id, prior, persistent = _resolve_session_safely(
+        req.session_id, req.database_id
+    )
 
     started = time.perf_counter()
     try:
@@ -85,18 +112,21 @@ def post_query(req: QueryRequest) -> QueryResponse:
     latency_ms = int((time.perf_counter() - started) * 1000)
 
     # Persistence is best-effort: a Supabase blip after a successful agent
-    # run must not fail the user's query. We log and move on.
-    try:
-        sessions.append_turn(
-            session_id=session_id,
-            question=req.question,
-            sql=result.sql,
-            rows_count=len(result.rows),
-            attempts=result.attempts,
-            latency_ms=latency_ms,
-        )
-    except Exception:  # noqa: BLE001 — intentional swallow, logged
-        logger.exception("failed to persist turn for session %s", session_id)
+    # run must not fail the user's query. We log and move on. We also
+    # skip when running in transient-session mode (Supabase was already
+    # known-down at session resolution time).
+    if persistent:
+        try:
+            sessions.append_turn(
+                session_id=session_id,
+                question=req.question,
+                sql=result.sql,
+                rows_count=len(result.rows),
+                attempts=result.attempts,
+                latency_ms=latency_ms,
+            )
+        except Exception:  # noqa: BLE001 — intentional swallow, logged
+            logger.exception("failed to persist turn for session %s", session_id)
 
     return QueryResponse(
         sql=result.sql,
@@ -131,12 +161,13 @@ def post_query_stream(req: QueryRequest) -> StreamingResponse:
     cleanly — the HTTP status stays 200 because the response body has
     already started. The frontend distinguishes outcomes by event kind.
 
-    Session resolution happens SYNCHRONOUSLY before streaming begins,
-    so a Supabase outage at that step still surfaces as an HTTP 500
-    (no partial response — the caller can retry safely).
+    Session resolution happens SYNCHRONOUSLY before streaming begins.
+    A Supabase outage at that step degrades to a transient session
+    (the stream still starts; persistence is skipped for that turn).
     """
-    session_id = sessions.ensure_session(req.session_id, req.database_id)
-    prior = sessions.recent_turns(session_id, n=2)
+    session_id, prior, persistent = _resolve_session_safely(
+        req.session_id, req.database_id
+    )
 
     def event_stream() -> Iterator[str]:
         started = time.perf_counter()
@@ -148,19 +179,20 @@ def post_query_stream(req: QueryRequest) -> StreamingResponse:
                     result = event.result
                     assert result is not None
                     latency_ms = int((time.perf_counter() - started) * 1000)
-                    try:
-                        sessions.append_turn(
-                            session_id=session_id,
-                            question=req.question,
-                            sql=result.sql,
-                            rows_count=len(result.rows),
-                            attempts=result.attempts,
-                            latency_ms=latency_ms,
-                        )
-                    except Exception:  # noqa: BLE001
-                        logger.exception(
-                            "failed to persist turn for session %s", session_id
-                        )
+                    if persistent:
+                        try:
+                            sessions.append_turn(
+                                session_id=session_id,
+                                question=req.question,
+                                sql=result.sql,
+                                rows_count=len(result.rows),
+                                attempts=result.attempts,
+                                latency_ms=latency_ms,
+                            )
+                        except Exception:  # noqa: BLE001
+                            logger.exception(
+                                "failed to persist turn for session %s", session_id
+                            )
                     yield _ndjson(
                         {
                             "event": "result",

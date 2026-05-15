@@ -409,6 +409,33 @@ def md_table(rows: list[dict[str, Any]], columns: list[str]) -> str:
     return head + "\n".join(body_lines)
 
 
+def write_raw_jsonl(path: Path, results: list[Result]) -> None:
+    """Dump per-case raw outputs (sql, attempts, error, ...) for offline diagnosis.
+
+    Written next to the .md report so any failure investigation has the actual
+    generated SQL to read. Overwrites each call so a partial run still leaves
+    a valid file.
+    """
+    lines = []
+    for r in results:
+        lines.append(json.dumps({
+            "id": r.case.id,
+            "database_id": r.case.database_id,
+            "difficulty": r.case.difficulty,
+            "question": r.case.question,
+            "status": r.status,
+            "attempts": r.attempts,
+            "rows_count": r.rows_count,
+            "latency_ms": r.latency_ms,
+            "passed": r.passed,
+            "failure_mode": r.failure_mode,
+            "error": r.error,
+            "sql": r.sql,
+            "soft_failures": r.soft_failures,
+        }, ensure_ascii=False))
+    path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+
+
 def write_report(
     path: Path,
     backend: str,
@@ -529,6 +556,7 @@ def main() -> int:
     sha = short_git_sha()
     started_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
     report_path = REPORTS_DIR / f"{started_iso}-{sha}.md"
+    raw_path = REPORTS_DIR / f"{started_iso}-{sha}.jsonl"
 
     print(f"running {len(cases)} cases against {backend} (concurrency={args.concurrency})")
     print(f"report -> {report_path.relative_to(ROOT)}")
@@ -549,6 +577,7 @@ def main() -> int:
         # Incremental snapshot — overwrite on every result so Ctrl-C
         # always leaves a valid (partial) report behind.
         write_report(report_path, backend, all_cases, completed, sha, started_iso, prev)
+        write_raw_jsonl(raw_path, completed)
 
     try:
         asyncio.run(run_all(backend, cases, args.concurrency, args.pace_seconds, on_result))
@@ -557,6 +586,7 @@ def main() -> int:
 
     # Final write (in case the last on_result was racy — cheap insurance).
     write_report(report_path, backend, all_cases, completed, sha, started_iso, prev)
+    write_raw_jsonl(raw_path, completed)
 
     h = headline(completed)
     print()

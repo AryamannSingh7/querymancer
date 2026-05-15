@@ -48,6 +48,41 @@ def test_query_returns_session_id_when_omitted(monkeypatch):
     assert isinstance(body["session_id"], str) and body["session_id"]
 
 
+def test_query_degrades_gracefully_when_session_layer_down(monkeypatch):
+    """If Supabase is unreachable, /query still answers (transient session, no persist)."""
+    import psycopg
+
+    def boom(*args, **kwargs):
+        raise psycopg.OperationalError("DNS flap")
+
+    # Make the *real* session helpers blow up — the router's wrapper
+    # should catch this and fall back to a transient session.
+    monkeypatch.setattr("app.routers.query.sessions.ensure_session", boom)
+    monkeypatch.setattr("app.routers.query.sessions.recent_turns", boom)
+
+    persisted: list[dict] = []
+    def fake_append_turn(**kwargs):
+        persisted.append(kwargs)
+    monkeypatch.setattr("app.routers.query.sessions.append_turn", fake_append_turn)
+
+    monkeypatch.setattr(
+        "app.core.agent.llm.generate_sql",
+        lambda prompt_text, system_instruction: LLMOutput(
+            sql="SELECT CustomerID FROM Customers LIMIT 1",
+            explanation="ok",
+            chart_hint=ChartHint.table,
+        ),
+    )
+    r = client.post("/query", json={"question": "list one", "database_id": "northwind"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["session_id"]
+    assert body["sql"].startswith("SELECT")
+    # Persistence is skipped in transient-session mode — caller has no
+    # session row to attach the turn to.
+    assert persisted == []
+
+
 def test_query_echoes_provided_session_id(monkeypatch):
     """Follow-up: client passes session_id; server echoes it back."""
     monkeypatch.setattr(

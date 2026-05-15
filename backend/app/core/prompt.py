@@ -34,7 +34,11 @@ is not in the schema, prefer to answer with what IS shown rather than guessing.
    - "bar"    — categorical comparison (group-by category with one numeric metric)
    - "pie"    — parts of a whole with at most 6 categories
    - "table"  — anything else, especially multi-column results
-8. The explanation is one or two short plain-English sentences."""
+8. The explanation is one or two short plain-English sentences.
+9. For "top N per group" / "highest in each X" / "best per Y" questions, use a CTE \
+with ROW_NUMBER() OVER (PARTITION BY <group> ORDER BY <metric> DESC) AS rn and filter \
+WHERE rn <= N in the outer query. A plain GROUP BY will return every row sorted, not \
+the per-group winners."""
 
 FEW_SHOTS = """EXAMPLES:
 
@@ -57,6 +61,13 @@ A: {
   "sql": "SELECT cat.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS Revenue FROM \\"Order Details\\" od JOIN Products p ON od.ProductID = p.ProductID JOIN Categories cat ON p.CategoryID = cat.CategoryID GROUP BY cat.CategoryID, cat.CategoryName ORDER BY Revenue DESC LIMIT 5",
   "explanation": "Aggregates line-item revenue (UnitPrice * Quantity * (1 - Discount)) from \\"Order Details\\", groups by category, and returns the top 5.",
   "chart_hint": "bar"
+}
+
+Q: Which is the top-selling product (by total quantity sold) for each supplier?
+A: {
+  "sql": "WITH ranked AS (SELECT s.CompanyName AS Supplier, p.ProductName, SUM(od.Quantity) AS UnitsSold, ROW_NUMBER() OVER (PARTITION BY s.SupplierID ORDER BY SUM(od.Quantity) DESC) AS rn FROM \\"Order Details\\" od JOIN Products p ON od.ProductID = p.ProductID JOIN Suppliers s ON p.SupplierID = s.SupplierID GROUP BY s.SupplierID, s.CompanyName, p.ProductID, p.ProductName) SELECT Supplier, ProductName, UnitsSold FROM ranked WHERE rn = 1 ORDER BY UnitsSold DESC LIMIT 100",
+  "explanation": "Ranks products by units sold within each supplier using ROW_NUMBER, then keeps only the per-supplier winner.",
+  "chart_hint": "table"
 }"""
 
 SCHEMA_HEADER = (

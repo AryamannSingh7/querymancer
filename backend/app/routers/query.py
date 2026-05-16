@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 from google.genai.errors import ClientError, ServerError
 
-from app.core import agent, sessions
+from app.core import agent, retriever, sessions
 from app.core.sessions import TurnSnippet
 from app.models import QueryRequest, QueryResponse
 
@@ -62,6 +62,17 @@ def post_query(req: QueryRequest) -> QueryResponse:
     except ValueError as e:
         # unknown database_id from build_prompt
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except retriever.RetrieverUnavailable as e:
+        # Supabase pgvector unreachable (transient pooler DNS flap) — the
+        # retriever exhausted its retry budget. 503, not 500: it's retryable.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "message": "Schema search is temporarily unavailable. Try again in a moment.",
+                "attempts": 0,
+                "errors": [str(e)[:400]],
+            },
+        )
     except agent.AgentError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -220,6 +231,16 @@ def post_query_stream(req: QueryRequest) -> StreamingResponse:
                     "kind": "unknown_database",
                     "session_id": session_id,
                     "message": str(e),
+                }
+            )
+        except retriever.RetrieverUnavailable as e:
+            yield _ndjson(
+                {
+                    "event": "error",
+                    "kind": "retriever_unavailable",
+                    "session_id": session_id,
+                    "message": "Schema search is temporarily unavailable. Try again in a moment.",
+                    "errors": [str(e)[:400]],
                 }
             )
         except agent.AgentError as e:

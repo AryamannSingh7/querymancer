@@ -27,6 +27,16 @@ class SchemaChunk:
     distance: float
 
 
+class RetrieverUnavailable(RuntimeError):
+    """The schema-embedding store (Supabase pgvector) is unreachable.
+
+    Raised after every connection retry is exhausted — almost always a
+    transient pooler DNS flap (`getaddrinfo failed`) rather than a code
+    fault. The router maps this to a 503 so the client sees a retryable
+    error instead of a bare 500.
+    """
+
+
 _QUERY = """
 SELECT table_name, content, embedding <=> %s AS distance
 FROM public.schema_embeddings
@@ -35,8 +45,12 @@ ORDER BY embedding <=> %s
 LIMIT %s
 """
 
-_CONNECT_ATTEMPTS = 3
-_CONNECT_BASE_DELAY = 0.5
+# 4 attempts with delays 1s, 2s, 4s — ~7s total backoff. A Supabase pooler
+# DNS flap routinely outlasts a sub-2s budget (see the 2026-05-16 IPL eval:
+# ipl_040/041 burned all 3 of the old 0.5s/1s retries inside ~4s), so the
+# budget is wide enough to ride out a brief resolution hiccup.
+_CONNECT_ATTEMPTS = 4
+_CONNECT_BASE_DELAY = 1.0
 
 
 def top_k(database_id: str, question: str, k: int = 5) -> list[SchemaChunk]:
@@ -45,11 +59,14 @@ def top_k(database_id: str, question: str, k: int = 5) -> list[SchemaChunk]:
     K=5 is the project default per the RAG plan. Reduce for very small DBs
     if it would just return the whole schema anyway.
 
-    Retries transient OperationalError up to 3 times with exponential backoff
-    (0.5s, 1s) — getaddrinfo on Windows occasionally fails when called from
+    Retries transient OperationalError up to 4 times with exponential backoff
+    (1s, 2s, 4s) — getaddrinfo on Windows occasionally fails when called from
     threadpool workers in quick succession, and Supabase's pooler can close
     idle connections. A connection pool would be the right long-term fix
     (Phase 6 production polish); for now retrying covers the demo path.
+
+    Raises `RetrieverUnavailable` (not the raw psycopg error) once the
+    retry budget is spent, so the router can return a 503 instead of 500.
     """
     qvec = np.array(embed_query(question), dtype=np.float32)
     url = get_settings().supabase_db_url
@@ -80,4 +97,7 @@ def top_k(database_id: str, question: str, k: int = 5) -> list[SchemaChunk]:
                 time.sleep(_CONNECT_BASE_DELAY * (2 ** attempt))
 
     assert last_err is not None
-    raise last_err
+    raise RetrieverUnavailable(
+        f"schema retrieval store unreachable after {_CONNECT_ATTEMPTS} attempts: "
+        f"{last_err}"
+    ) from last_err

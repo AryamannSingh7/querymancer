@@ -83,6 +83,23 @@ def test_query_degrades_gracefully_when_session_layer_down(monkeypatch):
     assert persisted == []
 
 
+def test_query_returns_503_when_retriever_unavailable(monkeypatch):
+    """A Supabase pgvector outage (pooler DNS flap) → 503, not a bare 500."""
+    from app.core.retriever import RetrieverUnavailable
+
+    def boom(*args, **kwargs):
+        raise RetrieverUnavailable("schema retrieval store unreachable after 4 attempts")
+
+    # build_prompt calls retriever.top_k; the conftest mock_retriever fixture
+    # already patches it — override that with the outage.
+    monkeypatch.setattr("app.core.prompt.retriever.top_k", boom)
+
+    r = client.post("/query", json={"question": "list one", "database_id": "northwind"})
+    assert r.status_code == 503
+    detail = r.json()["detail"]
+    assert "temporarily unavailable" in detail["message"].lower()
+
+
 def test_query_echoes_provided_session_id(monkeypatch):
     """Follow-up: client passes session_id; server echoes it back."""
     monkeypatch.setattr(

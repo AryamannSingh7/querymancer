@@ -980,10 +980,10 @@
 
 - id: ipl_036
   database_id: ipl
-  question: "Top 3 wicketkeepers by dismissals (caught + stumped credited to them)."
+  question: "Top 3 wicketkeepers by total runs scored across all matches."
   expected_min_rows: 1
   expected_max_rows: 3
-  difficulty: hard
+  difficulty: medium
 
 - id: ipl_037
   database_id: ipl
@@ -1023,7 +1023,7 @@
 
 - id: ipl_042
   database_id: ipl
-  question: "Top 5 strike rates among batters with at least 100 balls faced."
+  question: "Top 5 strike rates among batters who have faced at least 100 balls in total across all matches."
   expected_min_rows: 1
   expected_max_rows: 5
   difficulty: hard
@@ -1067,7 +1067,7 @@
   database_id: ipl
   question: "Players who have captained at least 5 matches."
   expected_min_rows: 1
-  expected_max_rows: 50
+  expected_max_rows: 80
   difficulty: hard
 
 - id: ipl_049

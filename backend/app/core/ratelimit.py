@@ -24,7 +24,28 @@ from slowapi.util import get_remote_address
 # burst from draining the daily LLM budget.
 RATE_LIMIT = "10/minute"
 
-limiter = Limiter(key_func=get_remote_address)
+
+def _client_ip(request: Request) -> str:
+    """Resolve the real client IP behind Hugging Face Spaces' reverse proxy.
+
+    HF fronts the container with a pool of internal router pods, so
+    `request.client.host` (what slowapi's `get_remote_address` returns) is a
+    rotating ``10.16.x.x`` proxy address — every request looks like a fresh
+    client and the limiter never accumulates. The real client IP is the
+    left-most entry of the ``X-Forwarded-For`` header.
+
+    ``XFF[0]`` is client-supplied and therefore spoofable; that is an accepted
+    tradeoff for a free-tier demo whose limiter exists to stop accidental
+    hammering, not a determined adversary. Falls back to `get_remote_address`
+    when the header is absent (local dev, the test suite).
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=_client_ip)
 
 
 def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:

@@ -13,36 +13,59 @@ instance and keeps the zero-budget constraint intact.
 """
 from __future__ import annotations
 
+import logging
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+logger = logging.getLogger("querymancer.ratelimit")
+
 # 10 requests / minute / IP. The 11th request inside the window is rejected
 # with a 429 — far above any realistic human pace, low enough to stop a
 # burst from draining the daily LLM budget.
 RATE_LIMIT = "10/minute"
 
+# Candidate client-IP headers, in priority order. HF Spaces fronts the
+# container with a pool of internal router pods, so `request.client.host`
+# (what slowapi's `get_remote_address` returns) is a rotating 10.16.x.x
+# proxy address — useless as a limiter key. The real client IP is in a
+# forwarded header; which one is proxy-specific, so we check the common set.
+_FORWARDED_HEADERS = (
+    "x-forwarded-for",
+    "x-real-ip",
+    "true-client-ip",
+    "cf-connecting-ip",
+)
+
 
 def _client_ip(request: Request) -> str:
-    """Resolve the real client IP behind Hugging Face Spaces' reverse proxy.
+    """Resolve the real client IP behind a reverse proxy for the limiter key.
 
-    HF fronts the container with a pool of internal router pods, so
-    `request.client.host` (what slowapi's `get_remote_address` returns) is a
-    rotating ``10.16.x.x`` proxy address — every request looks like a fresh
-    client and the limiter never accumulates. The real client IP is the
-    left-most entry of the ``X-Forwarded-For`` header.
+    Walks `_FORWARDED_HEADERS` and returns the first match's left-most entry.
+    That value is client-supplied and therefore spoofable — an accepted
+    tradeoff for a free-tier demo whose limiter stops accidental hammering,
+    not a determined adversary. Falls back to `get_remote_address` (local
+    dev, the test suite — neither sends a forwarded header).
 
-    ``XFF[0]`` is client-supplied and therefore spoofable; that is an accepted
-    tradeoff for a free-tier demo whose limiter exists to stop accidental
-    hammering, not a determined adversary. Falls back to `get_remote_address`
-    when the header is absent (local dev, the test suite).
+    Logs the resolution once per request so the deployed environment's
+    actual header set is visible in the container logs.
     """
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return get_remote_address(request)
+    host = request.client.host if request.client else None
+    for header in _FORWARDED_HEADERS:
+        value = request.headers.get(header)
+        if value:
+            ip = value.split(",")[0].strip()
+            logger.info("ratelimit key via %s: %s (client.host=%s)", header, ip, host)
+            return ip
+    fallback = get_remote_address(request)
+    logger.info(
+        "ratelimit key: no forwarded header (client.host=%s) -> %s; headers=%s",
+        host, fallback, sorted(request.headers.keys()),
+    )
+    return fallback
 
 
 limiter = Limiter(key_func=_client_ip)

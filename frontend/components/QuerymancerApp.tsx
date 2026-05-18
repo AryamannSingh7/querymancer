@@ -318,7 +318,7 @@ function Header({
           backend online
         </span>
         <span className="text-zinc-500 tracking-[0.18em] uppercase whitespace-nowrap">
-          v0.5 · phase v
+          v1.0 · phase vii
         </span>
       </nav>
     </motion.header>

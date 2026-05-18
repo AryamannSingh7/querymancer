@@ -172,6 +172,40 @@ def test_query_stream_emits_attempt_failed_then_result(monkeypatch):
     assert result["attempts"] == 2
 
 
+def test_query_rate_limited(monkeypatch):
+    """The 11th /query inside a minute from one IP is rejected with a 429.
+
+    The `disable_rate_limit` conftest fixture keeps the limiter off for the
+    rest of the suite; this test flips it on, fires a burst, and restores it.
+    """
+    from app.core.ratelimit import limiter
+
+    monkeypatch.setattr(
+        "app.core.agent.llm.generate_sql",
+        lambda prompt_text, system_instruction: LLMOutput(
+            sql="SELECT CustomerID FROM Customers LIMIT 1",
+            explanation="ok",
+            chart_hint=ChartHint.table,
+        ),
+    )
+
+    payload = {"question": "list one", "database_id": "northwind"}
+    limiter.enabled = True
+    try:
+        codes = [client.post("/query", json=payload).status_code for _ in range(11)]
+        blocked = client.post("/query", json=payload)
+    finally:
+        limiter.enabled = False
+
+    # 10 allowed, the 11th over the limit.
+    assert codes[:10] == [200] * 10
+    assert codes[10] == 429
+    assert blocked.status_code == 429
+    detail = blocked.json()["detail"]
+    assert "rate-limited" in detail["message"].lower()
+    assert blocked.headers["Retry-After"] == "60"
+
+
 def test_query_stream_emits_error_event_when_agent_exhausted(monkeypatch):
     monkeypatch.setattr(
         "app.core.agent.llm.generate_sql",

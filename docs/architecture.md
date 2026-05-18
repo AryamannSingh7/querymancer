@@ -13,6 +13,7 @@ flowchart TB
     end
 
     subgraph BE["Backend — FastAPI on Hugging Face Spaces"]
+        RL["ratelimit.py<br/>slowapi · 10 req/min/IP<br/>gates POST /query*"]
         API["routers/query.py<br/>POST /query<br/>POST /query/stream (NDJSON)<br/>GET /databases/{id}/schema"]
         SESS["sessions.py<br/>resolve/create session<br/>fetch recent 2 turns"]
         PROMPT["prompt.py<br/>system + RAG chunks +<br/>few-shots + prior turns +<br/>prior errors"]
@@ -41,7 +42,8 @@ flowchart TB
         DB3[("ipl.db<br/>8 tables · 16.8K rows")]
     end
 
-    UI -- "/backend/* (same-origin proxy)" --> API
+    UI -- "/backend/* (same-origin proxy)" --> RL
+    RL -- "429 if over 10/min/IP" --> API
     API --> SESS
     SESS --> SESST
     API --> AGENT
@@ -80,6 +82,7 @@ sequenceDiagram
 
     U->>UI: "top 5 products by revenue last quarter"
     UI->>API: POST /query { question, database_id, session_id }
+    Note over API: slowapi: 10 req/min/IP — 429 before any work if over limit
     API->>SESS: ensure_session + recent_turns(n=2)
     API->>EMB: embed_query(question)
     EMB-->>API: vector(768)
@@ -149,6 +152,21 @@ Two independent layers, both required for any LLM-generated SQL:
 Both layers are non-negotiable per CLAUDE.md. Removing either would
 make Querymancer unsafe to expose publicly.
 
+A third, coarser layer guards the *service* rather than the SQL.
+`app/core/ratelimit.py` applies a per-IP `slowapi` limit of **10
+requests/minute** to `POST /query` and `POST /query/stream` (the
+decorator runs before any session, retrieval, or LLM work). The public
+demo runs on a free-tier Gemini key capped at 20 requests/day — without
+the limiter a single client refreshing the page could drain the whole
+day's budget in seconds. The 11th request in a window gets a `429` with
+the structured `{detail:{message,attempts,errors}}` body and a
+`Retry-After: 60` header; `lib/api.ts` maps it to the same "try again"
+UX as an upstream-quota 503. Storage is in-memory fixed-window — no
+Redis, correct for the single Space instance. The limiter is disabled
+in the test suite via an autouse fixture and exercised by one dedicated
+test (`test_query_rate_limited`). The eval harness retries `429`s the
+same way it retries `503`s, so a rate-limited slice self-recovers.
+
 ## 5. Schema RAG
 
 Per-table chunks are pre-computed by `cli/reindex.py`:
@@ -208,10 +226,10 @@ begun. The frontend distinguishes outcomes by `event.kind`.
 ```
 backend/
   app/
-    main.py              # FastAPI app, CORS, exception handlers
+    main.py              # FastAPI app, CORS, rate limiter + exception handlers
     models.py            # QueryRequest, QueryResponse, LLMOutput, ChartHint
     routers/
-      query.py           # POST /query, POST /query/stream
+      query.py           # POST /query, POST /query/stream (both rate-limited)
       schema.py          # GET /databases/{id}/schema
     core/
       config.py          # Settings via pydantic-settings + .env
@@ -220,6 +238,7 @@ backend/
       prompt.py          # system + RAG + few-shots + prior turns + errors
       llm.py             # Gemini primary, Groq fallback on 429 / 5xx
       safety.py          # sqlglot AST + denylist + single-stmt + LIMIT
+      ratelimit.py       # slowapi per-IP limiter (10/min) + 429 handler
       executor.py        # SQLite mode=ro, 5s timeout, 1000-row cap
       agent.py           # self-correction loop, max 3 attempts (sync + iter)
       sessions.py        # sessions/turns persistence (Supabase, retry-on-OperationalError)
@@ -248,9 +267,12 @@ frontend/
   lib/
     api.ts types.ts suggestedQuestions.ts
   next.config.ts         # /backend/* → BACKEND_URL rewrite (same-origin)
+  playwright.config.ts   # e2e config — video:'on', deployed app by default
+  e2e/
+    demo.spec.ts         # scripted walkthrough → recorded demo + §17 smoke test
 
 eval/
   cases.yaml             # 150 cases × 3 DBs
-  run_eval.py            # async harness, incremental writes
+  run_eval.py            # async harness, incremental writes (retries 429 + 503)
   reports/               # dated markdown reports
 ```

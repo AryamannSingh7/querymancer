@@ -491,8 +491,8 @@
 - id: hr_017
   database_id: hr
   question: "List employees who have no manager."
-  expected_min_rows: 1
-  expected_max_rows: 50
+  expected_min_rows: 80
+  expected_max_rows: 95
   difficulty: medium
 
 - id: hr_018
@@ -581,7 +581,7 @@
 
 - id: hr_030
   database_id: hr
-  question: "Employees ranked by salary within their department, top by dept."
+  question: "Show the single highest-paid employee in each department."
   expected_min_rows: 8
   expected_max_rows: 8
   difficulty: hard

@@ -5,11 +5,12 @@ import time
 import uuid
 from collections.abc import Iterator
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from google.genai.errors import ClientError, ServerError
 
 from app.core import agent, retriever, sessions
+from app.core.ratelimit import RATE_LIMIT, limiter
 from app.core.sessions import TurnSnippet
 from app.models import QueryRequest, QueryResponse
 
@@ -47,7 +48,10 @@ def _resolve_session_safely(
 
 
 @router.post("/query", response_model=QueryResponse)
-def post_query(req: QueryRequest) -> QueryResponse:
+@limiter.limit(RATE_LIMIT)
+def post_query(request: Request, req: QueryRequest) -> QueryResponse:
+    # `request` is unused here but required: slowapi's @limiter.limit reads
+    # the client IP off it. Removing the param breaks the decorator.
     # Resolve or create a session BEFORE the agent runs so the response
     # always has a session_id, even on failure paths. If the session
     # layer is unreachable, fall back to a transient session (no
@@ -156,7 +160,8 @@ def _ndjson(obj: dict) -> str:
 
 
 @router.post("/query/stream")
-def post_query_stream(req: QueryRequest) -> StreamingResponse:
+@limiter.limit(RATE_LIMIT)
+def post_query_stream(request: Request, req: QueryRequest) -> StreamingResponse:
     """Streaming sibling of /query.
 
     Emits NDJSON events as the self-correction loop progresses so the

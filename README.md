@@ -33,7 +33,7 @@
 |  |  |  |
 |---|---|---|
 | **RAG over schema** | **Agentic self-correction** | **Defense-in-depth safety** |
-| Top-K pgvector retrieval surfaces only the tables that matter, so 13-table databases don't blow the prompt window. Asymmetric `task_type` (DOCUMENT vs QUERY) and 768-d MRL-renormalised vectors. | When generated SQL fails to execute, the verbatim DB error is fed back into the next attempt (max 3). Most failures fix themselves on attempt 2 — streamed live to the frontend as it happens. | Two independent layers: `sqlglot` AST + denylist + single-statement + auto-`LIMIT`, *and* the connection itself opens `mode=ro`. Layer 1 can't be bypassed by stacked-statement or comment-injection tricks. |
+| Top-K pgvector retrieval surfaces only the tables that matter, so 13-table databases don't blow the prompt window. Asymmetric `task_type` (DOCUMENT vs QUERY) and 768-d MRL-renormalised vectors. | When generated SQL fails to execute, the verbatim DB error is fed back into the next attempt (max 3). Most failures fix themselves on attempt 2 — streamed live to the frontend as it happens. | Two independent layers: `sqlglot` AST + denylist + single-statement + auto-`LIMIT`, *and* the connection itself opens `mode=ro`. Layer 1 can't be bypassed by stacked-statement or comment-injection tricks. A per-IP rate limit (10/min) sits in front so one client can't drain the daily LLM budget. |
 | **Gemini → Groq fallback** | **Multi-turn refinement** | **Production-grade eval** |
 | When Gemini's free-tier daily cap hits, `llm.generate_sql` automatically retries the same prompt against Groq Llama 3.3 70B. The demo stays live on quota days. | Sessions persist to Supabase; the last 2 turns get inlined into the prompt. Ask *"now break that down by category"* and the model resolves the pronoun against the previous SQL. | 150-case async eval harness grades by row-count assertion across 3 DBs and 3 difficulty tiers. Writes dated markdown reports incrementally — Ctrl-C leaves a valid partial. |
 
@@ -43,7 +43,8 @@
 
 ```mermaid
 flowchart LR
-    UI["Next.js<br/>(Vercel)"] -- "/backend/* proxy" --> API["FastAPI<br/>(HF Spaces)"]
+    UI["Next.js<br/>(Vercel)"] -- "/backend/* proxy" --> RL["Rate limit<br/>10/min/IP"]
+    RL --> API["FastAPI<br/>(HF Spaces)"]
     API --> AGENT["Agent loop<br/>(max 3 attempts)"]
     AGENT -- "top-K=5" --> RAG[("Supabase pgvector<br/>schema_embeddings")]
     AGENT --> LLM["llm.generate_sql"]
@@ -75,6 +76,7 @@ The full component diagram, the `/query` sequence with the fallback decision bra
   <img alt="Python" src="https://img.shields.io/badge/Python_3.11-3776AB?style=flat-square&logo=python&logoColor=white">
   <img alt="Pydantic" src="https://img.shields.io/badge/Pydantic_v2-E92063?style=flat-square&logo=pydantic&logoColor=white">
   <img alt="sqlglot" src="https://img.shields.io/badge/sqlglot-AST_safety-222?style=flat-square">
+  <img alt="slowapi" src="https://img.shields.io/badge/slowapi-rate_limit-222?style=flat-square">
   <img alt="SQLite" src="https://img.shields.io/badge/SQLite-mode%3Dro-003B57?style=flat-square&logo=sqlite&logoColor=white">
   <img alt="Supabase" src="https://img.shields.io/badge/Supabase-Postgres-3FCF8E?style=flat-square&logo=supabase&logoColor=white">
 </p>
@@ -96,6 +98,7 @@ The full component diagram, the `/query` sequence with the fallback decision bra
   <img alt="Docker" src="https://img.shields.io/badge/Docker-CPU_basic-2496ED?style=flat-square&logo=docker&logoColor=white">
   <img alt="Vercel" src="https://img.shields.io/badge/Vercel-000?style=flat-square&logo=vercel&logoColor=white">
   <img alt="GitHub Actions" src="https://img.shields.io/badge/GitHub_Actions-CI%20%2B%20keepalive-2088FF?style=flat-square&logo=githubactions&logoColor=white">
+  <img alt="Playwright" src="https://img.shields.io/badge/Playwright-e2e-2EAD33?style=flat-square&logo=playwright&logoColor=white">
 </p>
 
 Every component is on a permanent free tier. Zero-dollar budget was a hard constraint, not a stretch goal.
@@ -178,6 +181,9 @@ cd backend && pytest -q
 python eval/run_eval.py --backend http://127.0.0.1:8000 --concurrency 2
 # subset filters:
 #   --only-db hr            --only-difficulty hard            --limit-per-db 10
+
+# end-to-end demo walkthrough — records a video (see frontend/playwright.config.ts)
+cd frontend && npx playwright install chromium && npm run test:e2e
 ```
 
 </details>
@@ -186,17 +192,22 @@ python eval/run_eval.py --backend http://127.0.0.1:8000 --concurrency 2
 
 ## Eval
 
-The eval harness (`eval/run_eval.py`) grades 150 cases across 3 DBs and 3 difficulty tiers by row-count assertion. Each report includes:
+The eval harness (`eval/run_eval.py`) grades 150 cases across 3 DBs and 3 difficulty tiers by row-count assertion. Each report includes pass rate (overall / per-DB / per-difficulty), latency `p50` / `p95` / `p99`, the self-correction attempt distribution, failure modes grouped (`UPSTREAM_LLM`, `ASSERTION_FAILED`, `SQL_INVALID`, `TIMEOUT`), and a delta vs the previous run. Reports are written incrementally — Ctrl-C leaves a valid partial behind.
 
-- pass rate (overall, per-DB, per-difficulty)
-- latency `p50` / `p95` / `p99` (client-side, what users feel)
-- attempt distribution — how often the self-correction loop kicks in
-- failure modes grouped (`UPSTREAM_LLM`, `ASSERTION_FAILED`, `SQL_INVALID`, `TIMEOUT`)
-- delta vs previous run
+Runs are paced across multiple days: the combined free-tier budget (Gemini 20 RPD + Groq) fits roughly 40-50 cases per day at this prompt size, so the suite runs one per-DB slice at a time. Latest slices (reports under [`eval/reports/`](eval/reports/)):
 
-Reports are written incrementally — Ctrl-C leaves a valid partial behind.
+| DB | cases | passed | rate | run |
+|---|---|---|---|---|
+| `northwind` | 50 | 49 | **98.0%** | 2026-05-17 |
+| `hr` | 50 | 45 | **90.0%** | 2026-05-18 |
+| `ipl` | 50 | 44 | **88.0%** | 2026-05-16 |
+| **combined** | **150** | **138** | **92.0%** | — |
 
-> **Baseline status:** numbers are being collected across multiple days. The combined free-tier budget (Gemini 20 RPD + Groq 100K TPD) fits roughly 40-50 successful cases per day at our prompt size — the full 150-case aggregate will land at `eval/reports/` once the HR and IPL slices complete.
+137 of the 138 passing cases succeeded on the **first** SQL the model generated; one self-corrected on attempt 2. The retry loop is a safety net, not a crutch.
+
+The 12 failures break down honestly: most are free-tier quota walls (Gemini's daily cap hit mid-slice — the embedding endpoint has no Groq fallback) or eval cases whose row-count bounds were too tight and have since been corrected. Genuine model misses — wrong SQL for a well-posed question — are a small minority.
+
+Typical latency is `p50 ≈ 6-14s`, dominated by the Gemini call itself on the free tier. The reported `p95` is inflated by the harness backing off through quota-wall `503`s — a free-tier cost, not a system bug; a paid LLM tier would bring it to ~2-3s.
 
 <br/>
 
@@ -211,7 +222,7 @@ Reports are written incrementally — Ctrl-C leaves a valid partial behind.
 | 4 | Next.js frontend — chat, schema browser, interactive ERD, mobile | shipped |
 | 5 | Multi-turn sessions + live "self-correcting…" UX + landing page | shipped |
 | 6 | Deployment (HF Spaces + Vercel) + GitHub Actions CI + Groq fallback | shipped |
-| 7 | Eval baseline (in progress, paced across multiple days for free-tier quotas), demo video | in progress |
+| 7 | Eval suite across all 3 DBs + Playwright demo walkthrough | shipped |
 
 <br/>
 

@@ -92,3 +92,19 @@ def mock_sessions(monkeypatch):
     monkeypatch.setattr("app.routers.query.sessions.ensure_session", fake_ensure_session)
     monkeypatch.setattr("app.routers.query.sessions.recent_turns", fake_recent_turns)
     monkeypatch.setattr("app.routers.query.sessions.append_turn", fake_append_turn)
+
+
+@pytest.fixture(autouse=True)
+def disable_rate_limit():
+    """Turn the per-IP /query limiter off for the suite.
+
+    Many tests POST /query within the same wall-clock minute from the
+    shared TestClient IP; the 10/min limiter would 429 them. The limiter
+    has its own dedicated test (`test_query_rate_limited`) which flips it
+    back on locally.
+    """
+    from app.core.ratelimit import limiter
+
+    limiter.enabled = False
+    yield
+    limiter.enabled = True

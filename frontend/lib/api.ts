@@ -59,9 +59,10 @@ export async function postQuery(req: QueryRequest): Promise<QueryResponse> {
     }
   }
 
-  // 502/503 — Gemini upstream issues (rate-limit or transient outage)
+  // 429 (per-IP limiter) / 502 / 503 — all carry the structured detail
+  // shape and all map to the clean "try again" UX.
   if (
-    (res.status === 502 || res.status === 503) &&
+    (res.status === 429 || res.status === 502 || res.status === 503) &&
     body?.detail &&
     typeof body.detail === "object"
   ) {
@@ -107,6 +108,21 @@ export async function postQueryStream(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
   });
+
+  // The per-IP limiter rejects before the stream starts — a plain 429 JSON
+  // body, never an NDJSON stream. Surface it as the clean "try again" UX.
+  if (res.status === 429) {
+    const body = (await res.json().catch(() => null)) as { detail?: unknown } | null;
+    const detail = body?.detail;
+    if (detail && typeof detail === "object") {
+      throw new UpstreamError(detail as AgentExhaustedDetail);
+    }
+    throw new UpstreamError({
+      message: "The demo is rate-limited right now. Wait a minute and try again.",
+      attempts: 0,
+      errors: [],
+    });
+  }
 
   if (!res.ok || !res.body) {
     throw new Error(`Stream failed: ${res.status} ${res.statusText}`);

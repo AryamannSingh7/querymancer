@@ -139,10 +139,11 @@ async def execute_case(
             r = await client.post(f"{backend}/query", json=payload, timeout=REQUEST_TIMEOUT_S)
             status_code = r.status_code
             body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-            # Free-tier Gemini RPM bursts surface as 503 with Retry-After.
-            # The eval should treat these as transient: back off, then retry.
-            # We cap retries so a genuine daily-quota exhaustion still fails fast.
-            if status_code == 503 and retries_used < max_503_retries:
+            # Free-tier Gemini RPM bursts surface as 503, and the backend's
+            # own per-IP limiter surfaces as 429 — both carry Retry-After and
+            # both are transient: back off, then retry. We cap retries so a
+            # genuine daily-quota exhaustion still fails fast.
+            if status_code in (429, 503) and retries_used < max_503_retries:
                 ra = r.headers.get("Retry-After", "")
                 try:
                     wait_s = max(1.0, float(ra)) if ra else 8.0
@@ -185,6 +186,8 @@ async def execute_case(
     if failure_mode is None and status_code != 200:
         if status_code == 422:
             failure_mode = "SQL_INVALID"  # agent loop exhausted (bad SQL / safety / runtime)
+        elif status_code == 429:
+            failure_mode = "RATE_LIMITED"  # per-IP limiter — survived all retries
         elif status_code in (502, 503):
             failure_mode = "UPSTREAM_LLM"
         elif status_code == 400:

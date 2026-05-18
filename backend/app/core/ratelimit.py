@@ -1,38 +1,39 @@
-"""Per-IP rate limiting for the public /query endpoints.
+"""Rate limiting for the public /query endpoints.
 
-The demo backend runs on a free-tier Gemini key with a 20-requests-per-day
-cap. Without a limiter a single visitor refreshing the page — or a bot —
-could burn the whole day's budget in under a minute. slowapi gives each
-client IP a fixed-window quota.
+The demo backend runs on free-tier LLM keys (Gemini 20 requests/day, Groq
+100K tokens/day). Without a limiter a single visitor refreshing the page —
+or a bot — could drain the whole day's budget in under a minute. slowapi
+enforces a fixed-window 10/minute quota.
+
+**Keying.** Per-client-IP would be ideal, but Hugging Face Spaces routes the
+container behind a pool of internal proxies and forwards no usable client-IP
+header — `request.client.host` is only ever a rotating ``10.16.x.x`` address,
+and `X-Forwarded-For` / `X-Real-IP` / etc. are absent. So the limiter degrades
+to a single shared bucket: a **global** 10/minute cap. That still does the
+job — it caps total burst load on the shared free-tier quota, which is the
+limiter's whole purpose. On a platform that *does* expose the client IP via a
+standard forwarded header, `_client_ip` keys per-IP automatically.
+
+Storage is in-memory — no Redis — correct for the single HF Space instance
+and keeps the zero-budget constraint intact.
 
 The eval harness is unaffected: at the default concurrency of 1 it runs
 latency-bound (~13s per /query → ~5 req/min), well under the limit.
-
-Storage is in-memory — no Redis — which is correct for the single HF Space
-instance and keeps the zero-budget constraint intact.
 """
 from __future__ import annotations
-
-import logging
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
-logger = logging.getLogger("querymancer.ratelimit")
-
-# 10 requests / minute / IP. The 11th request inside the window is rejected
-# with a 429 — far above any realistic human pace, low enough to stop a
-# burst from draining the daily LLM budget.
+# 10 requests / minute. The 11th request inside the window is rejected with a
+# 429 — far above any realistic human pace, low enough to stop a burst from
+# draining the daily LLM budget.
 RATE_LIMIT = "10/minute"
 
-# Candidate client-IP headers, in priority order. HF Spaces fronts the
-# container with a pool of internal router pods, so `request.client.host`
-# (what slowapi's `get_remote_address` returns) is a rotating 10.16.x.x
-# proxy address — useless as a limiter key. The real client IP is in a
-# forwarded header; which one is proxy-specific, so we check the common set.
+# Standard client-IP headers, in priority order. Used when the platform
+# exposes the real client IP; HF Spaces does not (see module docstring).
 _FORWARDED_HEADERS = (
     "x-forwarded-for",
     "x-real-ip",
@@ -40,32 +41,24 @@ _FORWARDED_HEADERS = (
     "cf-connecting-ip",
 )
 
+# Shared bucket used when no client IP is available — makes the limit global.
+_SHARED_KEY = "querymancer-shared"
+
 
 def _client_ip(request: Request) -> str:
-    """Resolve the real client IP behind a reverse proxy for the limiter key.
+    """Limiter key: the real client IP, or a shared global key as a fallback.
 
-    Walks `_FORWARDED_HEADERS` and returns the first match's left-most entry.
-    That value is client-supplied and therefore spoofable — an accepted
-    tradeoff for a free-tier demo whose limiter stops accidental hammering,
-    not a determined adversary. Falls back to `get_remote_address` (local
-    dev, the test suite — neither sends a forwarded header).
-
-    Logs the resolution once per request so the deployed environment's
-    actual header set is visible in the container logs.
+    Returns the left-most entry of the first present forwarded header. That
+    value is client-supplied and spoofable — an accepted tradeoff for a
+    free-tier demo whose limiter stops accidental hammering, not a determined
+    adversary. When no forwarded header is present (HF Spaces, local dev, the
+    test suite) every request maps to `_SHARED_KEY`, making the limit global.
     """
-    host = request.client.host if request.client else None
     for header in _FORWARDED_HEADERS:
         value = request.headers.get(header)
         if value:
-            ip = value.split(",")[0].strip()
-            logger.info("ratelimit key via %s: %s (client.host=%s)", header, ip, host)
-            return ip
-    fallback = get_remote_address(request)
-    logger.info(
-        "ratelimit key: no forwarded header (client.host=%s) -> %s; headers=%s",
-        host, fallback, sorted(request.headers.keys()),
-    )
-    return fallback
+            return value.split(",")[0].strip()
+    return _SHARED_KEY
 
 
 limiter = Limiter(key_func=_client_ip)

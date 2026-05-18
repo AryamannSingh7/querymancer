@@ -153,13 +153,15 @@ Both layers are non-negotiable per CLAUDE.md. Removing either would
 make Querymancer unsafe to expose publicly.
 
 A third, coarser layer guards the *service* rather than the SQL.
-`app/core/ratelimit.py` applies a per-IP `slowapi` limit of **10
-requests/minute** to `POST /query` and `POST /query/stream` (the
-decorator runs before any session, retrieval, or LLM work). The client
-IP is read from the `X-Forwarded-For` header — HF Spaces fronts the
-container with a pool of internal router pods, so `request.client.host`
-is a rotating proxy address that would defeat the limiter if keyed on
-directly. The public
+`app/core/ratelimit.py` applies a `slowapi` limit of **10 requests/minute**
+to `POST /query` and `POST /query/stream` (the decorator runs before any
+session, retrieval, or LLM work). The limit is **global** — a single shared
+bucket, not per-IP: HF Spaces routes the container behind a pool of internal
+proxies and forwards no usable client-IP header, so `request.client.host` is
+only ever a rotating `10.16.x.x` address. A global cap still serves the
+purpose — it bounds total burst load on the shared free-tier quota. On a
+platform that exposes the real client IP via a standard forwarded header,
+`_client_ip` keys per-IP automatically. The public
 demo runs on a free-tier Gemini key capped at 20 requests/day — without
 the limiter a single client refreshing the page could drain the whole
 day's budget in seconds. The 11th request in a window gets a `429` with

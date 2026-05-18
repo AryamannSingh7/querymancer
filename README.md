@@ -33,7 +33,7 @@
 |  |  |  |
 |---|---|---|
 | **RAG over schema** | **Agentic self-correction** | **Defense-in-depth safety** |
-| Top-K pgvector retrieval surfaces only the tables that matter, so 13-table databases don't blow the prompt window. Asymmetric `task_type` (DOCUMENT vs QUERY) and 768-d MRL-renormalised vectors. | When generated SQL fails to execute, the verbatim DB error is fed back into the next attempt (max 3). Most failures fix themselves on attempt 2 — streamed live to the frontend as it happens. | Two independent layers: `sqlglot` AST + denylist + single-statement + auto-`LIMIT`, *and* the connection itself opens `mode=ro`. Layer 1 can't be bypassed by stacked-statement or comment-injection tricks. A per-IP rate limit (10/min) sits in front so one client can't drain the daily LLM budget. |
+| Top-K pgvector retrieval surfaces only the tables that matter, so 13-table databases don't blow the prompt window. Asymmetric `task_type` (DOCUMENT vs QUERY) and 768-d MRL-renormalised vectors. | When generated SQL fails to execute, the verbatim DB error is fed back into the next attempt (max 3). Most failures fix themselves on attempt 2 — streamed live to the frontend as it happens. | Two independent layers: `sqlglot` AST + denylist + single-statement + auto-`LIMIT`, *and* the connection itself opens `mode=ro`. Layer 1 can't be bypassed by stacked-statement or comment-injection tricks. A 10/min rate limit sits in front so a burst can't drain the daily LLM budget. |
 | **Gemini → Groq fallback** | **Multi-turn refinement** | **Production-grade eval** |
 | When Gemini's free-tier daily cap hits, `llm.generate_sql` automatically retries the same prompt against Groq Llama 3.3 70B. The demo stays live on quota days. | Sessions persist to Supabase; the last 2 turns get inlined into the prompt. Ask *"now break that down by category"* and the model resolves the pronoun against the previous SQL. | 150-case async eval harness grades by row-count assertion across 3 DBs and 3 difficulty tiers. Writes dated markdown reports incrementally — Ctrl-C leaves a valid partial. |
 
@@ -43,7 +43,7 @@
 
 ```mermaid
 flowchart LR
-    UI["Next.js<br/>(Vercel)"] -- "/backend/* proxy" --> RL["Rate limit<br/>10/min/IP"]
+    UI["Next.js<br/>(Vercel)"] -- "/backend/* proxy" --> RL["Rate limit<br/>10/min"]
     RL --> API["FastAPI<br/>(HF Spaces)"]
     API --> AGENT["Agent loop<br/>(max 3 attempts)"]
     AGENT -- "top-K=5" --> RAG[("Supabase pgvector<br/>schema_embeddings")]

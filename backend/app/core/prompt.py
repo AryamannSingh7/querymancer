@@ -35,10 +35,15 @@ is not in the schema, prefer to answer with what IS shown rather than guessing.
    - "pie"    — parts of a whole with at most 6 categories
    - "table"  — anything else, especially multi-column results
 8. The explanation is one or two short plain-English sentences.
-9. For "top N per group" / "highest in each X" / "best per Y" questions, use a CTE \
-with ROW_NUMBER() OVER (PARTITION BY <group> ORDER BY <metric> DESC) AS rn and filter \
-WHERE rn <= N in the outer query. A plain GROUP BY will return every row sorted, not \
-the per-group winners."""
+9. Window-function ranking — read the question's intent precisely:
+   (a) "top N per group" / "highest/best/largest in each X" / "the single ... per Y" — \
+the user wants only the per-group winners. Use a CTE with ROW_NUMBER() OVER (PARTITION BY \
+<group> ORDER BY <metric> DESC) AS rn and filter WHERE rn <= N (rn = 1 when N is one) in \
+the outer query.
+   (b) "rank X within/by each group" with NO number and NO superlative word — the user \
+wants EVERY row kept, with the rank shown as a column. Compute rn the same way but DO NOT \
+filter on rn; select it as a visible column and ORDER BY the group then rn.
+   A plain GROUP BY returns every row sorted, not per-group winners — only windowing does."""
 
 FEW_SHOTS = """EXAMPLES:
 
@@ -67,6 +72,13 @@ Q: Which is the top-selling product (by total quantity sold) for each supplier?
 A: {
   "sql": "WITH ranked AS (SELECT s.CompanyName AS Supplier, p.ProductName, SUM(od.Quantity) AS UnitsSold, ROW_NUMBER() OVER (PARTITION BY s.SupplierID ORDER BY SUM(od.Quantity) DESC) AS rn FROM \\"Order Details\\" od JOIN Products p ON od.ProductID = p.ProductID JOIN Suppliers s ON p.SupplierID = s.SupplierID GROUP BY s.SupplierID, s.CompanyName, p.ProductID, p.ProductName) SELECT Supplier, ProductName, UnitsSold FROM ranked WHERE rn = 1 ORDER BY UnitsSold DESC LIMIT 100",
   "explanation": "Ranks products by units sold within each supplier using ROW_NUMBER, then keeps only the per-supplier winner.",
+  "chart_hint": "table"
+}
+
+Q: Rank products within each category by units in stock.
+A: {
+  "sql": "WITH ranked AS (SELECT cat.CategoryName, p.ProductName, p.UnitsInStock, ROW_NUMBER() OVER (PARTITION BY p.CategoryID ORDER BY p.UnitsInStock DESC) AS StockRank FROM Products p JOIN Categories cat ON p.CategoryID = cat.CategoryID) SELECT CategoryName, ProductName, UnitsInStock, StockRank FROM ranked ORDER BY CategoryName, StockRank LIMIT 100",
+  "explanation": "Ranks every product within its category by units in stock using ROW_NUMBER, keeping all rows with the rank as a visible column (no per-group filter, since the question asks to rank rather than for a top-N).",
   "chart_hint": "table"
 }"""
 

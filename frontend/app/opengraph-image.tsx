@@ -2,7 +2,7 @@
 // Picked up automatically by Next 16 for og:image and twitter:image.
 //
 // Composition: ink background, faint lime glow at the bottom edge,
-// brand mark + wordmark + tagline + small "v0.5 · phase v" caption.
+// brand mark + wordmark + tagline + small "v1.0 · phase vii" caption.
 // No external font fetched — relies on satori's built-in default so
 // the build stays hermetic.
 
@@ -144,7 +144,7 @@ export default function OpenGraphImage() {
           }}
         >
           <span>schema rag · gemini · safe sql</span>
-          <span style={{ color: "#c5f500" }}>v0.5 · phase v</span>
+          <span style={{ color: "#c5f500" }}>v1.0 · phase vii</span>
         </div>
       </div>
     ),

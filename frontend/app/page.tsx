@@ -115,7 +115,7 @@ export default function Page() {
                 className="eyebrow-accent rise"
                 style={{ animationDelay: `${HERO_DELAYS.eyebrow}ms` }}
               >
-                Phase V · Live demo · Read-only
+                Phase VII · Live demo · Read-only
               </p>
 
               <h1
@@ -388,7 +388,7 @@ function SiteHeader() {
 function SiteFooter() {
   return (
     <footer className="border-t border-white/[0.06] py-8 mt-8 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between text-[11px] font-mono uppercase tracking-[0.18em] text-zinc-400">
-      <span>v0.5 · Phase V · Multi-turn + polish</span>
+      <span>v1.0 · Phase VII · Production-ready</span>
       <span>
         Built by{" "}
         <a

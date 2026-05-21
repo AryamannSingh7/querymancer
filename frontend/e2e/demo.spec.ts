@@ -15,9 +15,14 @@ import { test, expect, type Page } from "@playwright/test";
  *     npx playwright install chromium   # first time — pulls the browser
  *     npx playwright test               # records e2e/.artifacts/<…>/video.webm
  *
- * Convert the recording to a GIF for the README hero:
+ * Convert the recording to a GIF for the README hero. Two-pass palette
+ * keeps the colour clean (a one-pass GIF bands badly); setpts=0.5 plays
+ * it back at 2x so the ~3-min walkthrough lands as a short loop:
  *
- *     ffmpeg -i video.webm -vf "fps=12,scale=900:-1" demo.gif
+ *     ffmpeg -i video.webm -vf "setpts=0.5*PTS,fps=14,scale=900:-1:flags=lanczos,palettegen=stats_mode=diff" -y palette.png
+ *     ffmpeg -i video.webm -i palette.png -lavfi "setpts=0.5*PTS,fps=14,scale=900:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer" -y docs/screenshots/querymancer-demo.gif
+ *
+ * If the GIF exceeds ~12 MB, drop scale to 760 and fps to 12.
  *
  * Targets the deployed app by default; set PLAYWRIGHT_BASE_URL to test a
  * local `npm run dev`. Doubles as the §17 frontend smoke test.
@@ -58,8 +63,9 @@ test("demo walkthrough — landing, query, DB switch, multi-turn", async ({ page
   await expect(page).toHaveURL(/\/app/);
   await waitForAnswer(page, 1);
   await expect(page.getByRole("button", { name: "Copy SQL" })).toBeVisible();
-  // The results panel auto-selects a chart for the answer.
-  await expect(page.getByRole("button", { name: "table" })).toBeVisible();
+  // The results panel auto-selects a chart for the answer. `exact` so we
+  // hit the table tab toggle, not the DB cards (whose names say "N tables").
+  await expect(page.getByRole("button", { name: "table", exact: true })).toBeVisible();
   await beat(page, 2200);
 
   // 4 ─ Switch databases from the sidebar. Each switch starts a fresh

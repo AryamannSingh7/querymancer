@@ -22,7 +22,7 @@
 
 <br/>
 
-<img src="docs/screenshots/querymancer-desktop-final.png" alt="Querymancer desktop UI" width="900"/>
+<img src="docs/screenshots/querymancer-demo.gif" alt="Querymancer — ask a database in plain English, get safe SQL, live results, and a chart back" width="900"/>
 
 </div>
 
